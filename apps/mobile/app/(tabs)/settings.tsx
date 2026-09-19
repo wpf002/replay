@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { api, ApiError } from "../../src/lib/api";
 import { dollars, formatPhone, initials } from "../../src/lib/format";
@@ -17,6 +17,13 @@ export default function Settings() {
   const { colors } = useTheme();
   const [busy, setBusy] = useState<string | null>(null);
   const number = relayNumber(me.relayNumber);
+
+  // Settings can change elsewhere (the web account page); show the current values.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
