@@ -12,6 +12,7 @@ export * from "./pin.js";
 export * from "./queues.js";
 export * from "./rate-limit.js";
 export * from "./redis.js";
+export * from "./reminders.js";
 export * from "./time.js";
 export * from "./twilio.js";
 export * from "./usage.js";

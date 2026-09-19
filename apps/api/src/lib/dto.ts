@@ -1,4 +1,4 @@
-import { dailySpend, env, fromDbModel, GOOGLE_SCOPES } from "@relay/core";
+import { dailySpend, env, fromDbModel, GOOGLE_SCOPES, isRecurrence } from "@relay/core";
 import { getPrisma, type Action, type Conversation, type Memory, type Message, type Reminder, type User } from "@relay/db";
 import type {
   ActionDTO,
@@ -62,6 +62,7 @@ export function toReminderDTO(r: Reminder): ReminderDTO {
     id: r.id,
     body: r.body,
     runAt: r.runAt.toISOString(),
+    recurrence: isRecurrence(r.recurrence) ? r.recurrence : null,
     sentAt: r.sentAt?.toISOString() ?? null,
   };
 }
@@ -79,7 +80,9 @@ export async function toMeDTO(user: User): Promise<MeDTO> {
       where: { userId: user.id, status: "AWAITING_CONFIRMATION", expiresAt: { gt: now } },
     }),
     prisma.memory.count({ where: { userId: user.id } }),
-    prisma.reminder.count({ where: { userId: user.id, sentAt: null, runAt: { gt: now } } }),
+    prisma.reminder.count({
+      where: { userId: user.id, OR: [{ sentAt: null }, { recurrence: { not: null } }] },
+    }),
   ]);
   return {
     id: user.id,

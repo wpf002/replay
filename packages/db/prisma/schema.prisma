@@ -177,13 +177,15 @@ model Memory {
 }
 
 model Reminder {
-  id        String    @id @default(cuid())
-  userId    String
-  runAt     DateTime
-  body      String
-  jobId     String?
-  sentAt    DateTime?
-  createdAt DateTime  @default(now())
+  id         String    @id @default(cuid())
+  userId     String
+  runAt      DateTime
+  body       String
+  // null for one-off; "daily" | "weekdays" | "weekly" repeat at the same local time.
+  recurrence String?
+  jobId      String?
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([runAt])

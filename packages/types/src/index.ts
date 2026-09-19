@@ -106,7 +106,9 @@ export interface MemoryDTO {
 export interface ReminderDTO {
   id: string;
   body: string;
+  /** Next time it fires. */
   runAt: string;
+  recurrence: "daily" | "weekdays" | "weekly" | null;
   sentAt: string | null;
 }
 

@@ -61,8 +61,9 @@ export async function enqueueAction(actionId: string): Promise<void> {
   });
 }
 
+/** The job ID includes the time so each occurrence of a repeating reminder is its own job. */
 export async function scheduleReminder(reminderId: string, runAt: Date): Promise<string> {
-  const jobId = `reminder-${reminderId}`;
+  const jobId = `reminder-${reminderId}-${runAt.getTime()}`;
   await getQueue(QUEUE.reminders).add("reminder", { reminderId } satisfies ReminderJob, {
     ...RETAIN,
     jobId,

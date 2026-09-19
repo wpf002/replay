@@ -72,3 +72,46 @@ export function formatRange(start: Date, end: Date | null, timeZone: string): st
     ? `${first} – ${time.format(end)}`
     : `${first} – ${day.format(end)}, ${time.format(end)}`;
 }
+
+/** Wall-clock fields of an instant in a zone. */
+export function zonedParts(date: Date, timeZone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      weekday: "short",
+    })
+      .formatToParts(date)
+      .map((p) => [p.type, p.value]),
+  );
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+    weekday: parts.weekday as string,
+  };
+}
+
+function offsetMinutes(date: Date, timeZone: string): number {
+  const [sign, hh, mm] = /([+-])(\d{2}):(\d{2})/.exec(utcOffset(date, timeZone))?.slice(1) ?? ["+", "00", "00"];
+  return (sign === "-" ? -1 : 1) * (Number(hh) * 60 + Number(mm));
+}
+
+/** Same local wall-clock time `days` later, correct across DST changes. */
+export function addLocalDays(date: Date, days: number, timeZone: string): Date {
+  const p = zonedParts(date, timeZone);
+  const wall = Date.UTC(p.year, p.month - 1, p.day + days, p.hour, p.minute, p.second);
+  let result = wall - offsetMinutes(new Date(wall), timeZone) * 60_000;
+  // The offset at the guess can differ from the offset at the answer near a DST switch.
+  result = wall - offsetMinutes(new Date(result), timeZone) * 60_000;
+  return new Date(result);
+}

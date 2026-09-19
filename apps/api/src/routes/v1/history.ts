@@ -1,9 +1,9 @@
-import { UserError } from "@relay/core";
+import { cancelReminder, upcomingReminders, UserError } from "@relay/core";
 import { getPrisma } from "@relay/db";
-import type { HistoryItemDTO, MemoryDTO } from "@relay/types";
+import type { HistoryItemDTO, MemoryDTO, ReminderDTO } from "@relay/types";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { toHistoryItem, toMemoryDTO } from "../../lib/dto.js";
+import { toHistoryItem, toMemoryDTO, toReminderDTO } from "../../lib/dto.js";
 import { currentUser, requireUser } from "../../plugins/auth.js";
 
 export async function historyRoutes(app: FastifyInstance): Promise<void> {
@@ -31,6 +31,18 @@ export async function historyRoutes(app: FastifyInstance): Promise<void> {
       items: rows.map(toHistoryItem),
       nextBefore: rows.length === limit ? rows.at(-1)!.createdAt.toISOString() : null,
     };
+  });
+
+  app.get("/reminders", async (req): Promise<{ items: ReminderDTO[] }> => {
+    const rows = await upcomingReminders(currentUser(req).id);
+    return { items: rows.map(toReminderDTO) };
+  });
+
+  app.delete("/reminders/:id", async (req) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const removed = await cancelReminder(currentUser(req).id, id);
+    if (!removed) throw new UserError("Not found.", 404);
+    return { ok: true };
   });
 
   app.get("/memories", async (req): Promise<{ items: MemoryDTO[] }> => {
