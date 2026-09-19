@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { api, ApiError } from "../src/lib/api";
 import { whenLabel } from "../src/lib/format";
-import { useSession } from "../src/lib/session";
+import { requireSession, useSession } from "../src/lib/session";
 import { useApi } from "../src/lib/use-api";
 import { radius, space, useTheme } from "../src/theme";
 import { Appear, Card, Chip, EmptyState, ErrorBanner, Icon, Screen, Stack, Text } from "../src/ui";
@@ -15,7 +15,7 @@ const REPEAT: Record<NonNullable<ReminderDTO["recurrence"]>, string> = {
   weekly: "Every week",
 };
 
-export default function Reminders() {
+function Reminders() {
   const { colors } = useTheme();
   const { refresh: refreshMe } = useSession();
   const reminders = useApi<{ items: ReminderDTO[] }>("/v1/reminders");
@@ -84,3 +84,5 @@ const styles = StyleSheet.create({
   meta: { flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" },
   x: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
 });
+
+export default requireSession(Reminders);

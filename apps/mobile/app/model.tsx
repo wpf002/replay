@@ -3,11 +3,11 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { api, ApiError } from "../src/lib/api";
 import { ACCESS_LABEL, canUse, MODEL_INFO, modelAccess, modelTitle } from "../src/lib/models";
-import { useMe, useSession } from "../src/lib/session";
+import { requireSession, useMe, useSession } from "../src/lib/session";
 import { Button, Card, OptionCard, Screen, Stack, Text } from "../src/ui";
 import { PageHeader } from "../src/ui/nav";
 
-export default function ModelScreen() {
+function ModelScreen() {
   const me = useMe();
   const { setMe } = useSession();
   const [choice, setChoice] = useState<ModelId>(me.defaultModel);
@@ -67,3 +67,5 @@ export default function ModelScreen() {
     </Screen>
   );
 }
+
+export default requireSession(ModelScreen);

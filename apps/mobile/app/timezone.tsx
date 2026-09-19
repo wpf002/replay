@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { api, ApiError } from "../src/lib/api";
-import { useMe, useSession } from "../src/lib/session";
+import { requireSession, useMe, useSession } from "../src/lib/session";
 import { Field, Icon, ListGroup, ListRow, Screen, Section } from "../src/ui";
 import { PageHeader } from "../src/ui/nav";
 
@@ -37,7 +37,7 @@ function label(zone: string): string {
   return `${zone.replace(/_/g, " ").replace("/", " / ")}${offset ? `  ${offset}` : ""}`;
 }
 
-export default function TimezoneScreen() {
+function TimezoneScreen() {
   const me = useMe();
   const { setMe } = useSession();
   const [query, setQuery] = useState("");
@@ -79,3 +79,5 @@ export default function TimezoneScreen() {
     </Screen>
   );
 }
+
+export default requireSession(TimezoneScreen);

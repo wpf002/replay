@@ -3,13 +3,13 @@ import * as Haptics from "expo-haptics";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { api, ApiError } from "../src/lib/api";
 import { relativeTime } from "../src/lib/format";
-import { useSession } from "../src/lib/session";
+import { requireSession, useSession } from "../src/lib/session";
 import { useApi } from "../src/lib/use-api";
 import { radius, space, useTheme } from "../src/theme";
 import { Appear, Card, EmptyState, ErrorBanner, Icon, Screen, Stack, Text } from "../src/ui";
 import { PageHeader } from "../src/ui/nav";
 
-export default function Memories() {
+function Memories() {
   const { colors } = useTheme();
   const { refresh: refreshMe } = useSession();
   const memories = useApi<{ items: MemoryDTO[] }>("/v1/memories");
@@ -80,3 +80,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "flex-start", gap: space[3] },
   trash: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
 });
+
+export default requireSession(Memories);

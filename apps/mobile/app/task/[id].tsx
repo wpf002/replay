@@ -1,5 +1,6 @@
 import type { ComputerInput, ComputerKey, ComputerTaskDTO } from "@relay/types";
 import * as Haptics from "expo-haptics";
+import { requireSession } from "../../src/lib/session";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -120,7 +121,7 @@ function AnswerBox({ taskId, onSent }: { taskId: string; onSent: () => void }) {
   );
 }
 
-export default function TaskScreen() {
+function TaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const task = useLive<ComputerTaskDTO>(`/v1/computer/tasks/${id}`, 1500, isActive);
@@ -285,3 +286,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+
+export default requireSession(TaskScreen);

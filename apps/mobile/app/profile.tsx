@@ -2,11 +2,11 @@ import type { MeDTO } from "@relay/types";
 import { router } from "expo-router";
 import { useState } from "react";
 import { api, ApiError } from "../src/lib/api";
-import { useMe, useSession } from "../src/lib/session";
+import { requireSession, useMe, useSession } from "../src/lib/session";
 import { Button, Field, Screen } from "../src/ui";
 import { PageHeader } from "../src/ui/nav";
 
-export default function Profile() {
+function Profile() {
   const me = useMe();
   const { setMe } = useSession();
   const [name, setName] = useState(me.name ?? "");
@@ -44,3 +44,5 @@ export default function Profile() {
     </Screen>
   );
 }
+
+export default requireSession(Profile);

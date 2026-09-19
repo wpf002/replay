@@ -8,8 +8,41 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { SessionProvider } from "../src/lib/session";
+import { SessionProvider, useSession } from "../src/lib/session";
 import { useTheme } from "../src/theme";
+
+/**
+ * Routes, split by whether they need a session. Anything signed-in stays unreachable until one
+ * is loaded, so a link straight to a screen (relay://task/123) waits instead of crashing.
+ */
+function RootNavigator() {
+  const { colors } = useTheme();
+  const { ready, me } = useSession();
+
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Protected guard={Boolean(me)}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="setup" />
+        <Stack.Screen name="model" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="timezone" />
+        <Stack.Screen name="connections" />
+        <Stack.Screen name="task/[id]" />
+        <Stack.Screen name="pin" options={{ presentation: "modal" }} />
+        <Stack.Screen name="ai/[provider]" options={{ presentation: "modal" }} />
+        <Stack.Screen name="browser-signin" options={{ presentation: "modal" }} />
+        <Stack.Screen name="memories" options={{ presentation: "card" }} />
+        <Stack.Screen name="reminders" options={{ presentation: "card" }} />
+      </Stack.Protected>
+      <Stack.Protected guard={!me}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   const { colors, dark } = useTheme();
@@ -27,18 +60,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <SessionProvider>
         <StatusBar style={dark ? "light" : "dark"} />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.bg },
-          }}
-        >
-          <Stack.Screen name="pin" options={{ presentation: "modal" }} />
-          <Stack.Screen name="ai/[provider]" options={{ presentation: "modal" }} />
-          <Stack.Screen name="browser-signin" options={{ presentation: "modal" }} />
-          <Stack.Screen name="memories" options={{ presentation: "card" }} />
-          <Stack.Screen name="reminders" options={{ presentation: "card" }} />
-        </Stack>
+        <RootNavigator />
       </SessionProvider>
     </SafeAreaProvider>
   );

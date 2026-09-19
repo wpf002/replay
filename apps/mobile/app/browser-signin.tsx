@@ -1,4 +1,5 @@
 import type { ComputerTaskDTO } from "@relay/types";
+import { requireSession } from "../src/lib/session";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, StyleSheet } from "react-native";
@@ -9,7 +10,7 @@ import { PageHeader } from "../src/ui/nav";
 
 
 /** Opens a site in Relay's browser so the person signs in once and tasks can use the account. */
-export default function BrowserSignin() {
+function BrowserSignin() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -59,3 +60,5 @@ export default function BrowserSignin() {
 const styles = StyleSheet.create({
   note: { flexDirection: "row", gap: space[3] },
 });
+
+export default requireSession(BrowserSignin);

@@ -1,6 +1,9 @@
 import type { MeDTO } from "@relay/types";
+import { Redirect } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { View } from "react-native";
+import { useTheme } from "../theme";
 import { api, setApiToken, setUnauthorizedHandler } from "./api";
 
 const TOKEN_KEY = "relay.session";
@@ -74,4 +77,18 @@ export function useMe(): MeDTO {
   const { me } = useSession();
   if (!me) throw new Error("useMe without a session");
   return me;
+}
+
+/**
+ * Wraps a screen that needs a signed-in person. Opening one straight from a link waits for the
+ * stored session instead of rendering without it, and sends them to Welcome if there isn't one.
+ */
+export function requireSession<P extends object>(Screen: ComponentType<P>): ComponentType<P> {
+  return function Guarded(props: P) {
+    const { ready, me } = useSession();
+    const { colors } = useTheme();
+    if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+    if (!me) return <Redirect href="/welcome" />;
+    return <Screen {...props} />;
+  };
 }

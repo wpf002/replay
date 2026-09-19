@@ -8,7 +8,7 @@ import { formatPhone } from "../src/lib/format";
 import { connectGoogle } from "../src/lib/google";
 import { ACCESS_LABEL, MODEL_INFO, modelAccess, modelTitle } from "../src/lib/models";
 import { openMessages, relayNumber, saveRelayContact } from "../src/lib/relay";
-import { useMe, useSession } from "../src/lib/session";
+import { requireSession, useMe, useSession } from "../src/lib/session";
 import { radius, space, useTheme } from "../src/theme";
 import {
   Appear,
@@ -60,7 +60,7 @@ function Point({ icon, children }: { icon: IconName; children: ReactNode }) {
 }
 
 /** First-run setup after signup. Every step can be skipped and done later in Settings. */
-export default function Setup() {
+function Setup() {
   const me = useMe();
   const { setMe, refresh } = useSession();
   const [step, setStep] = useState<Step>("ai");
@@ -251,7 +251,7 @@ export default function Setup() {
                   title={modelTitle(m)}
                   badge={state === "connected" || state === "included" ? ACCESS_LABEL[state] : MODEL_INFO[m].prefix}
                   subtitle={MODEL_INFO[m].blurb}
-                  {...(chosen && picked.length > 1 ? { note: brain === m ? "Default · answers texts with no prefix" : "Tap the name to make it the default" } : {})}
+                  {...(chosen && picked.length > 1 && brain === m ? { note: "Default · answers texts with no prefix" } : {})}
                 />
               );
             })}
@@ -423,3 +423,5 @@ const styles = StyleSheet.create({
   defaults: { flexDirection: "row", gap: space[2], flexWrap: "wrap" },
   contact: { flexDirection: "row", alignItems: "center", gap: space[3] },
 });
+
+export default requireSession(Setup);

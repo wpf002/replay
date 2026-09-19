@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, ApiError } from "../src/lib/api";
-import { useSession } from "../src/lib/session";
+import { requireSession, useSession } from "../src/lib/session";
 import { font, radius, space, useTheme } from "../src/theme";
 import { Button, Icon, Text } from "../src/ui";
 
@@ -27,7 +27,7 @@ function prompt(mode: Mode, stage: Stage): { title: string; body: string } {
   return { title: "Enter it again", body: "Just to be sure." };
 }
 
-export default function PinScreen() {
+function PinScreen() {
   const params = useLocalSearchParams<{ mode?: Mode; actionId?: string }>();
   const mode: Mode = params.mode ?? "set";
   const { colors } = useTheme();
@@ -200,3 +200,5 @@ const styles = StyleSheet.create({
   },
   key: { width: 72, height: 72, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
 });
+
+export default requireSession(PinScreen);

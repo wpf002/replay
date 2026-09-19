@@ -5,7 +5,7 @@ import { Alert, StyleSheet, View } from "react-native";
 import { useAiConnect } from "../../src/lib/ai-connect";
 import { api, ApiError } from "../../src/lib/api";
 import { ACCESS_LABEL, MODEL_INFO, modelAccess } from "../../src/lib/models";
-import { useMe, useSession } from "../../src/lib/session";
+import { requireSession, useMe, useSession } from "../../src/lib/session";
 import { radius, space, useTheme } from "../../src/theme";
 import { Button, Card, Chip, Icon, Screen, Stack, Text } from "../../src/ui";
 import { AiConnectForm } from "../../src/ui/ai-connect-form";
@@ -14,7 +14,7 @@ import { PageHeader } from "../../src/ui/nav";
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
 /** Connect, replace, or remove one provider's API key. */
-export default function AiAccount() {
+function AiAccount() {
   const params = useLocalSearchParams<{ provider: string }>();
   const initial = MODELS.find((m) => m === params.provider) ?? "claude";
   const me = useMe();
@@ -219,3 +219,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+
+export default requireSession(AiAccount);
