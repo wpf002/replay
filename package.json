@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev dev:tunnel",
+    "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test --concurrency=1",
@@ -15,8 +15,7 @@
     "db:generate": "pnpm --filter @relay/db db:generate",
     "format": "prettier --write .",
     "configure": "pnpm --filter @relay/api configure",
-    "tunnel": "pnpm --filter @relay/api tunnel",
-    "dev:local": "turbo run dev"
+    "tunnel": "pnpm --filter @relay/api tunnel"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

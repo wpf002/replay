@@ -45,6 +45,19 @@ export function getEnv(file: EnvFile, key: string): string | undefined {
   return undefined;
 }
 
+/** Every key and value in the file, first occurrence wins. */
+export function envEntries(file: EnvFile): [string, string][] {
+  const seen = new Set<string>();
+  const out: [string, string][] = [];
+  for (const line of file.lines) {
+    const m = LINE.exec(line);
+    if (!m?.[1] || seen.has(m[1])) continue;
+    seen.add(m[1]);
+    out.push([m[1], unquote(m[2] ?? "")]);
+  }
+  return out;
+}
+
 /** Replaces the first `KEY=` line, or appends one. */
 export function setEnv(file: EnvFile, key: string, value: string): void {
   const next = `${key}=${quote(value)}`;

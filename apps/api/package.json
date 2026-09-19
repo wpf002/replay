@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --include ../../.env --env-file-if-exists=../../.env src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -13,8 +13,7 @@
     "invite:create": "tsx --env-file-if-exists=../../.env src/scripts/invites.ts create",
     "invite:list": "tsx --env-file-if-exists=../../.env src/scripts/invites.ts list",
     "configure": "tsx src/setup/main.ts",
-    "tunnel": "tsx src/setup/tunnel.ts",
-    "dev:tunnel": "RELAY_DEV_TUNNEL=1 tsx src/setup/tunnel.ts"
+    "tunnel": "tsx src/setup/tunnel.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",
