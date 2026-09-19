@@ -17,6 +17,7 @@
     "@fastify/sensible": "6.0.5",
     "@fastify/websocket": "11.3.1",
     "@relay/agent": "workspace:*",
+    "@relay/core": "workspace:*",
     "@relay/db": "workspace:*",
     "@relay/types": "workspace:*",
     "bullmq": "6.3.8",
@@ -29,5 +30,8 @@
     "twilio": "6.1.1",
     "zod": "4.6.5"
   },
-  "devDependencies": { "@relay/config": "workspace:*", "tsx": "4.23.13" }
+  "devDependencies": {
+    "@relay/config": "workspace:*",
+    "tsx": "4.23.13"
+  }
 }

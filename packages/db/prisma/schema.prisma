@@ -40,56 +40,77 @@ enum ActionStatus {
   AWAITING_CONFIRMATION
   CONFIRMED
   DENIED
+  EXPIRED
   RUNNING
   SUCCEEDED
   FAILED
 }
 
-model User {
-  id           String       @id @default(cuid())
-  phone        String       @unique // E.164
-  name         String?
-  timezone     String       @default("America/Chicago")
-  defaultModel ModelId      @default(CLAUDE)
-  pinHash      String?
-  smsOptInAt   DateTime?
-  smsOptOutAt  DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+enum ActionRisk {
+  LOW
+  MEDIUM
+  HIGH
+}
 
+model User {
+  id             String    @id @default(cuid())
+  phone          String    @unique // E.164
+  name           String?
+  timezone       String    @default("America/Chicago")
+  defaultModel   ModelId   @default(CLAUDE)
+  pinHash        String?
+  pinFailures    Int       @default(0)
+  pinLockedUntil DateTime?
+  smsOptInAt     DateTime?
+  smsOptOutAt    DateTime?
+  // Bumped to revoke every issued session JWT (sign out everywhere).
+  tokenVersion   Int       @default(0)
+  inviteId       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  invite        Invite?        @relation(fields: [inviteId], references: [id], onDelete: SetNull)
   connections   Connection[]
   conversations Conversation[]
   actions       Action[]
   memories      Memory[]
   reminders     Reminder[]
+  usage         Usage[]
 }
 
 model Connection {
-  id                String        @id @default(cuid())
-  userId            String
-  provider          OAuthProvider
-  scopes            String[]
-  accessTokenEnc    String
-  refreshTokenEnc   String?
-  expiresAt         DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  userId          String
+  provider        OAuthProvider
+  accountEmail    String?
+  scopes          String[]
+  accessTokenEnc  String
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, provider])
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
-  userId    String
-  channel   Channel
-  callSid   String?   @unique
-  startedAt DateTime  @default(now())
-  endedAt   DateTime?
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages  Message[]
+  id            String    @id @default(cuid())
+  userId        String
+  channel       Channel
+  direction     Direction @default(INBOUND)
+  callSid       String?   @unique
+  // Set on outbound calls Relay places for an Action (bookings, errands).
+  actionId      String?   @unique
+  startedAt     DateTime  @default(now())
+  lastMessageAt DateTime  @default(now())
+  endedAt       DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action        Action?   @relation("ActionCall", fields: [actionId], references: [id], onDelete: SetNull)
+  messages      Message[]
+  actions       Action[]  @relation("ActionSource")
 
-  @@index([userId, startedAt])
+  @@index([userId, channel, lastMessageAt])
 }
 
 model Message {
@@ -100,6 +121,8 @@ model Message {
   model          ModelId?
   content        String
   twilioSid      String?      @unique
+  // Citations, tool names, delivery errors.
+  metadata       Json?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -107,19 +130,33 @@ model Message {
 }
 
 model Action {
-  id                   String       @id @default(cuid())
+  id                   String        @id @default(cuid())
   userId               String
-  type                 String // e.g. gmail.send, calendar.create
-  status               ActionStatus @default(PENDING)
+  type                 String // tool name, e.g. gmail_send, calendar_create, place_call
+  status               ActionStatus  @default(PENDING)
+  // Exact text shown to the user before they confirm. Built from the payload, never by the model.
+  summary              String
   payload              Json
   result               Json?
-  requiresConfirmation Boolean      @default(true)
+  error                String?
+  risk                 ActionRisk    @default(MEDIUM)
+  requiresConfirmation Boolean       @default(true)
+  requiresPin          Boolean       @default(false)
+  // Requested while untrusted content (email, web, calendar) was in context.
+  tainted              Boolean       @default(false)
+  channel              Channel       @default(SMS)
+  conversationId       String?
+  expiresAt            DateTime?
   confirmedAt          DateTime?
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completedAt          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation         Conversation? @relation("ActionSource", fields: [conversationId], references: [id], onDelete: SetNull)
+  call                 Conversation? @relation("ActionCall")
 
   @@index([userId, status])
+  @@index([userId, createdAt])
 }
 
 model Memory {
@@ -130,17 +167,53 @@ model Memory {
   createdAt       DateTime @default(now())
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, createdAt])
 }
 
 model Reminder {
-  id     String    @id @default(cuid())
-  userId String
-  runAt  DateTime
-  body   String
-  jobId  String?
-  sentAt DateTime?
-  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String
+  runAt     DateTime
+  body      String
+  jobId     String?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([runAt])
+  @@index([userId, runAt])
+}
+
+/// One row per model call. Summed per day for the spend cap.
+model Usage {
+  id            String   @id @default(cuid())
+  userId        String
+  model         ModelId
+  providerModel String
+  channel       Channel?
+  inputTokens   Int
+  outputTokens  Int
+  costMicros    Int // USD * 1e6
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Invite {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  maxUses   Int       @default(1)
+  uses      Int       @default(0)
+  note      String?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  users     User[]
+}
+
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  source    String?
+  createdAt DateTime @default(now())
 }

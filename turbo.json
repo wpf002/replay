@@ -4,10 +4,10 @@
   "globalEnv": ["NODE_ENV"],
   "tasks": {
     "db:generate": { "cache": false },
-    "build": { "dependsOn": ["^build", "^db:generate"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
+    "build": { "dependsOn": ["^build", "db:generate"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
     "dev": { "dependsOn": ["^build"], "cache": false, "persistent": true },
     "lint": {},
-    "typecheck": { "dependsOn": ["^build"] },
+    "typecheck": { "dependsOn": ["^build", "db:generate"] },
     "test": { "dependsOn": ["^build"] },
     "db:migrate": { "cache": false }
   }

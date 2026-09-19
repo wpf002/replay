@@ -20,3 +20,13 @@ export const ROUTE_PREFIXES: Record<string, ModelId> = {
   "@web": "perplexity",
   "@perplexity": "perplexity",
 };
+
+/**
+ * Consent shown next to an unchecked checkbox wherever someone signs up (app and web).
+ * The same text is stored with the opt-in record, so change the version when the wording changes.
+ */
+export const SMS_CONSENT_VERSION = "2026-09-19";
+export const SMS_CONSENT_TEXT =
+  "I agree to receive conversational and account text messages from Relay at this number, " +
+  "including replies to my messages, reminders I set, and confirmation requests. " +
+  "Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.";

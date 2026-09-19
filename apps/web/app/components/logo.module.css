@@ -1,0 +1,30 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.word {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.mark {
+  flex: none;
+}
+
+.tile {
+  fill: var(--accent);
+}
+
+.bubble {
+  fill: var(--accent-fg);
+}
+
+.line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
