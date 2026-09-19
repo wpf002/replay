@@ -19,6 +19,7 @@
     "@relay/agent": "workspace:*",
     "@relay/core": "workspace:*",
     "@relay/db": "workspace:*",
+    "@relay/providers": "workspace:*",
     "@relay/types": "workspace:*",
     "bullmq": "6.3.8",
     "fastify": "5.12.5",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@relay/config": "workspace:*",
-    "tsx": "4.23.13"
+    "tsx": "4.23.13",
+    "@types/ws": "8.18.1"
   }
 }

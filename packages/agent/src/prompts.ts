@@ -57,6 +57,9 @@ export interface ContextInput {
   memories: { id: string; fact: string }[];
   google: { email: string | null } | null;
   pending: { summary: string }[];
+  /** Calls only. False when caller ID isn't verified and no PIN has been entered yet. */
+  callerVerified?: boolean;
+  hasPin?: boolean;
 }
 
 /** Per-request facts. Kept out of the stable prompt so the stable part stays cacheable. */
@@ -68,6 +71,12 @@ export function dynamicContext(c: ContextInput): string {
       ? `Google is connected${c.google.email ? ` as ${c.google.email}` : ""}, so the Gmail and Calendar tools work.`
       : "Google isn't connected, so there are no email or calendar tools. If they ask for email or calendar help, tell them to connect Google in the Relay app.",
   ];
+  if (c.callerVerified === false) {
+    lines.push(
+      "",
+      `This call's caller ID isn't verified, so email, calendar, and saved memories aren't available on the call. For those, offer follow_up_by_text so the answer goes to their phone by text${c.hasPin ? ", or tell them they can type their PIN on the keypad to unlock them" : ""}.`,
+    );
+  }
   if (c.memories.length) {
     lines.push("", "Things they asked you to remember (the bracketed ID is for forget):");
     for (const m of c.memories) lines.push(`- [${m.id}] ${m.fact}`);
@@ -88,6 +97,14 @@ export function voiceSystem(context: ContextInput): SystemPrompt {
 }
 
 export const WEB_SEARCH_SYSTEM = `You answer questions using live web results for an assistant that relays your answer by text message. Give the direct answer first in two to four plain sentences with concrete facts: names, numbers, dates, hours. Say so when sources disagree or information may be out of date. No markdown.`;
+
+/** Perplexity on a call: spoken answers, no URLs. */
+export function voiceWebSystem(context: ContextInput): SystemPrompt {
+  return {
+    stable: `You answer questions using live web results. Your answer is spoken aloud on a phone call: two or three short, natural sentences, no lists, no URLs, no markdown, no citation markers.`,
+    dynamic: `Current time: ${formatDateTime(context.now, context.timezone)}. The caller is in the ${context.timezone} time zone.`,
+  };
+}
 
 /** Used when someone texts @web: Perplexity answers directly, without tools. */
 export function webRouteSystem(context: ContextInput): SystemPrompt {

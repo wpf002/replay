@@ -47,6 +47,8 @@ export interface ToolDef<I = unknown> {
   needsGoogle?: boolean;
   /** Tools that can't run during a call (too slow, or they need a screen). */
   smsOnly?: boolean;
+  /** Tools that only make sense on a call (hang up, text me this). */
+  voiceOnly?: boolean;
   /** Risk for calls that need approval. Defaults to MEDIUM. HIGH also requires the PIN. */
   risk?: (input: I) => Risk;
   /** Forces approval for specific inputs, e.g. calendar invites that include other people. */
