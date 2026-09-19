@@ -57,6 +57,9 @@ const schema = z.object({
   // "chrome" uses the installed Google Chrome. Or point BROWSER_EXECUTABLE_PATH at a Chromium.
   BROWSER_CHANNEL: optional,
   BROWSER_EXECUTABLE_PATH: optional,
+  // Headless Chrome trips bot checks on sites like ChatGPT far more often. Defaults to a real
+  // window on macOS, headless elsewhere (a server needs Xvfb to run with a window).
+  BROWSER_HEADLESS: optional,
   // Model that drives the browser. Needs the browser toolset (Claude Opus 5, Sonnet 5, Fable 5).
   COMPUTER_MODEL: optional,
   // "input/output" USD per million tokens for COMPUTER_MODEL. Defaults to CLAUDE_PRICE.

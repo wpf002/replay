@@ -31,9 +31,10 @@ docker run -d --name relay-redis -p 6379:6379 redis:7
 pnpm configure                  # walks through every key, writes .env
 pnpm db:migrate
 pnpm --filter @relay/api invite:create -- --count 3 --uses 1   # prints invite codes
-pnpm dev                        # api :4000, web :3000, worker, expo
-pnpm tunnel                     # separate terminal: public URL + Twilio webhooks
+pnpm dev                        # api :4000, web :3000, worker, expo, and the tunnel
 ```
+
+`pnpm dev` starts the Cloudflare tunnel with everything else, so Twilio can reach your machine; each run gets a new URL and re-points the webhooks itself. `pnpm dev:local` skips it, and `pnpm tunnel` runs it alone.
 
 Without Twilio Verify, set `DEV_LOGIN_CODE=424242` in `.env` and use that code to sign in. The API refuses to start with it set when `NODE_ENV=production`, and `pnpm tunnel` refuses to open a public URL while it's set.
 
@@ -47,7 +48,7 @@ The wizard opens each provider's key page, takes the key as hidden input, checks
 | `pnpm configure <step>` | One step: `claude`, `gpt`, `perplexity`, `url`, `twilio`, `google`, `support` |
 | `pnpm configure --check` | Checks every key, sends each configured model a one-line test, checks Twilio webhooks and the Google client |
 | `pnpm configure twilio-sync` | Points Twilio at the current `PUBLIC_API_URL` |
-| `pnpm tunnel` | Opens a Cloudflare quick tunnel, saves its URL, and updates Twilio's webhooks |
+| `pnpm tunnel` | The tunnel on its own (`pnpm dev` already starts one) |
 
 - **Models.** Lists the models your key can use, test-sends the ones you pick, and fills in prices.
 - **Twilio.** Picks or buys a number (shows the price and asks first), creates the Verify service and the "Relay" Messaging Service, and sets the webhooks.

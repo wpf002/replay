@@ -28,6 +28,13 @@ export function isBlockedHost(hostname: string): boolean {
   return false;
 }
 
+/** Sites hand headless browsers far more bot checks, so run a real window where there's a display. */
+function headless(): boolean {
+  const setting = env().BROWSER_HEADLESS;
+  if (setting) return setting !== "false";
+  return process.platform !== "darwin" && !process.env.DISPLAY;
+}
+
 export function checkUrl(raw: string): URL {
   let url: URL;
   try {
@@ -89,7 +96,7 @@ export class RelayBrowser {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const e = env();
     const context = await chromium.launchPersistentContext(dir, {
-      headless: true,
+      headless: headless(),
       ...(e.BROWSER_EXECUTABLE_PATH ? { executablePath: e.BROWSER_EXECUTABLE_PATH } : { channel: e.BROWSER_CHANNEL ?? "chrome" }),
       viewport: { ...COMPUTER_VIEWPORT },
       deviceScaleFactor: 1,

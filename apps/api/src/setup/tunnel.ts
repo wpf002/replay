@@ -11,12 +11,15 @@ import * as tw from "./twilio.js";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const ENV_PATH = join(ROOT, ".env");
 const port = Number(process.env.API_PORT ?? 4000);
+// Started by pnpm dev: a tunnel that can't start shouldn't take the dev servers down with it.
+const inDev = process.env.RELAY_DEV_TUNNEL === "1";
+const give = (code: number) => process.exit(inDev ? 0 : code);
 
 // DEV_LOGIN_CODE lets anyone sign in as any number. It must never be reachable from the internet.
 if (getEnv(readEnvFile(ENV_PATH), "DEV_LOGIN_CODE")) {
   bad("DEV_LOGIN_CODE is set in .env. With a public tunnel, anyone could sign in as any number.");
   note("Clear it (Twilio Verify sends real codes once pnpm configure twilio is done), then run pnpm tunnel again.");
-  process.exit(1);
+  give(1);
 }
 
 const child = spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", `http://localhost:${port}`], {
@@ -24,8 +27,8 @@ const child = spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", `http:
 });
 
 child.on("error", () => {
-  bad("cloudflared isn't installed. Install it with: brew install cloudflared");
-  process.exit(1);
+  bad("cloudflared isn't installed, so Twilio can't reach this machine. Install it with: brew install cloudflared");
+  give(1);
 });
 
 let announced = false;
