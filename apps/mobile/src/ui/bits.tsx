@@ -91,25 +91,31 @@ export function Checkbox({
   );
 }
 
-/** Choice cards for a small set of options, e.g. the default model. */
+/** Choice cards for a small set of options: one of them, or several with `multi`. */
 export function OptionCard({
   selected,
   onPress,
   title,
   subtitle,
   badge,
+  multi,
+  note,
 }: {
   selected: boolean;
   onPress: () => void;
   title: string;
   subtitle: string;
   badge?: string;
+  /** Several can be picked at once, so the marker is a checkbox instead of a radio. */
+  multi?: boolean;
+  /** Small line under the title, e.g. "Default". */
+  note?: string;
 }) {
   const { colors } = useTheme();
   return (
     <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      accessibilityRole={multi ? "checkbox" : "radio"}
+      accessibilityState={multi ? { checked: selected } : { selected }}
       onPress={() => {
         void Haptics.selectionAsync();
         onPress();
@@ -132,9 +138,16 @@ export function OptionCard({
         <Text variant="caption" style={{ fontSize: size.sm }}>
           {subtitle}
         </Text>
+        {note ? <Text variant="caption">{note}</Text> : null}
       </View>
-      <View style={[styles.radio, { borderColor: selected ? colors.accent : colors.borderStrong }]}>
-        {selected ? <View style={[styles.radioDot, { backgroundColor: colors.accent }]} /> : null}
+      <View
+        style={[
+          multi ? styles.box : styles.radio,
+          { borderColor: selected ? colors.accent : colors.borderStrong },
+          multi && selected ? { backgroundColor: colors.accent } : null,
+        ]}
+      >
+        {selected ? multi ? <Icon name="check" size={14} color={colors.accentFg} /> : <View style={[styles.radioDot, { backgroundColor: colors.accent }]} /> : null}
       </View>
     </Pressable>
   );
@@ -193,6 +206,14 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: "row", gap: space[3], alignItems: "flex-start" },
   checkBox: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center", marginTop: 2 },
   option: { flexDirection: "row", alignItems: "center", gap: space[3], borderRadius: radius.md },
+  box: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.sm,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   radio: { width: 22, height: 22, borderRadius: radius.pill, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   radioDot: { width: 10, height: 10, borderRadius: radius.pill },
   track: { height: 6, borderRadius: radius.pill, overflow: "hidden" },

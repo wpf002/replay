@@ -65,15 +65,33 @@ export default function Setup() {
   const { setMe, refresh } = useSession();
   const [step, setStep] = useState<Step>("ai");
   const [busy, setBusy] = useState(false);
+  // People often use more than one AI, so they pick every one they want and connect them in turn.
+  const [picked, setPicked] = useState<ModelId[]>([me.defaultModel]);
   const [brain, setBrain] = useState<ModelId>(me.defaultModel);
-  const [justConnected, setJustConnected] = useState(false);
-  const conn = useAiConnect(brain, (_me, provider) => {
-    setBrain(provider);
-    setJustConnected(true);
+  const [queue, setQueue] = useState<ModelId[]>([]);
+  const [useKey, setUseKey] = useState(false);
+  const current = queue[0] ?? brain;
+  const conn = useAiConnect(current, (_me, provider) => {
+    // A key pasted for another provider connects that one instead.
+    setPicked((list) => (list.includes(provider) ? list : [...list, provider]));
+    advance();
   });
   const number = relayNumber(me.relayNumber);
   const next = () => setStep(ORDER[Math.min(ORDER.indexOf(step) + 1, ORDER.length - 1)]!);
-  const [useKey, setUseKey] = useState(false);
+
+  function toggle(model: ModelId) {
+    setPicked((list) => {
+      const nextList = list.includes(model) ? list.filter((m) => m !== model) : [...list, model];
+      if (!nextList.includes(brain) && nextList[0]) setBrain(nextList[0]);
+      return nextList;
+    });
+  }
+
+  /** Done with the AI at the front of the queue, on to the next. */
+  function advance() {
+    setUseKey(false);
+    setQueue((rest) => rest.slice(1));
+  }
 
   // Coming back from signing in to an AI account: pick up that it's connected now.
   useFocusEffect(
@@ -85,7 +103,7 @@ export default function Setup() {
   async function signIntoAi() {
     setBusy(true);
     try {
-      const task = await api<ComputerTaskDTO>(`/v1/ai-accounts/${brain}/signin`, { body: {} });
+      const task = await api<ComputerTaskDTO>(`/v1/ai-accounts/${current}/signin`, { body: {} });
       router.push(`/task/${task.id}`);
     } catch (err) {
       Alert.alert("Couldn't open it", err instanceof ApiError ? err.message : "Try again.");
@@ -93,8 +111,9 @@ export default function Setup() {
       setBusy(false);
     }
   }
-  const brainAccess = modelAccess(me, brain);
-  const brainInfo = AI_PROVIDERS[brain];
+  const info = AI_PROVIDERS[current];
+  const access = modelAccess(me, current);
+  const connectedPicks = picked.filter((m) => modelAccess(me, m) === "connected");
 
   async function addContact() {
     setBusy(true);
@@ -132,8 +151,9 @@ export default function Setup() {
     setBusy(true);
     try {
       setMe(await api<MeDTO>("/v1/me", { method: "PATCH", body: { defaultModel: brain } }));
-      // Already connected (setup reopened): nothing to paste.
-      setStep(modelAccess(me, brain) === "connected" ? "contact" : "key");
+      const toConnect = picked.filter((m) => modelAccess(me, m) !== "connected");
+      setQueue(toConnect);
+      setStep(toConnect.length || picked.length > 1 ? "key" : "contact");
     } catch (err) {
       Alert.alert("Couldn't save", err instanceof ApiError ? err.message : "Try again.");
     } finally {
@@ -141,47 +161,34 @@ export default function Setup() {
     }
   }
 
-  /** The key they pasted belonged to another provider; that one becomes the default. */
-  async function afterKey() {
-    if (brain !== me.defaultModel) {
-      try {
-        setMe(await api<MeDTO>("/v1/me", { method: "PATCH", body: { defaultModel: brain } }));
-      } catch {
-        // They can change the default in Settings.
-      }
-    }
-    next();
-  }
-
   const index = ORDER.indexOf(step);
   const footer = {
     ai: <Button label="Continue" block loading={busy} onPress={saveBrain} />,
-    key:
-      justConnected || brainAccess === "connected" ? (
-        <Button label="Continue" block onPress={() => void afterKey()} />
-      ) : useKey ? (
-        <Stack gap={2}>
-          <Button
-            label={`Connect ${AI_PROVIDERS[conn.provider].name}`}
-            block
-            loading={conn.checking}
-            disabled={!conn.key || Boolean(conn.otherProvider)}
-            onPress={() => void conn.connect()}
-          />
-          <Button label="Back" kind="ghost" block onPress={() => setUseKey(false)} />
-        </Stack>
-      ) : (
-        <Stack gap={2}>
-          <Button label={`Sign in to ${brainInfo.name}`} icon="log-in" block loading={busy} onPress={() => void signIntoAi()} />
-          <Button label="Use an API key instead" kind="ghost" block onPress={() => setUseKey(true)} />
-          <Button
-            label={brainAccess === "included" ? `Use Relay's included ${brainInfo.name}` : "Skip for now"}
-            kind="ghost"
-            block
-            onPress={next}
-          />
-        </Stack>
-      ),
+    key: !queue.length ? (
+      <Button label="Continue" block onPress={next} />
+    ) : useKey ? (
+      <Stack gap={2}>
+        <Button
+          label={`Connect ${AI_PROVIDERS[conn.provider].name}`}
+          block
+          loading={conn.checking}
+          disabled={!conn.key || Boolean(conn.otherProvider)}
+          onPress={() => void conn.connect()}
+        />
+        <Button label="Back" kind="ghost" block onPress={() => setUseKey(false)} />
+      </Stack>
+    ) : (
+      <Stack gap={2}>
+        <Button label={`Sign in to ${info.name}`} icon="log-in" block loading={busy} onPress={() => void signIntoAi()} />
+        <Button label="Use an API key instead" kind="ghost" block onPress={() => setUseKey(true)} />
+        <Button
+          label={access === "included" ? `Use Relay's included ${info.name}` : queue.length > 1 ? "Skip this one" : "Skip for now"}
+          kind="ghost"
+          block
+          onPress={advance}
+        />
+      </Stack>
+    ),
     contact: (
       <Stack gap={2}>
         <Button label="Add Relay to contacts" icon="user-plus" block loading={busy} onPress={addContact} />
@@ -228,48 +235,71 @@ export default function Setup() {
         <Stack gap={6} key="ai">
           <Hero
             icon="cpu"
-            title="Choose your AI"
-            body="It answers your texts and calls. You can switch per message with a prefix, or connect more later."
+            title="Choose your AIs"
+            body="Pick every one you use. The first is your default; start a text with a prefix to use another."
           />
           <Stack gap={3}>
             {MODELS.map((m) => {
-              const access = modelAccess(me, m);
+              const state = modelAccess(me, m);
+              const chosen = picked.includes(m);
               return (
                 <OptionCard
                   key={m}
-                  selected={brain === m}
-                  onPress={() => setBrain(m)}
+                  multi
+                  selected={chosen}
+                  onPress={() => toggle(m)}
                   title={modelTitle(m)}
-                  badge={access === "connected" || access === "included" ? ACCESS_LABEL[access] : MODEL_INFO[m].prefix}
+                  badge={state === "connected" || state === "included" ? ACCESS_LABEL[state] : MODEL_INFO[m].prefix}
                   subtitle={MODEL_INFO[m].blurb}
+                  {...(chosen && picked.length > 1 ? { note: brain === m ? "Default · answers texts with no prefix" : "Tap the name to make it the default" } : {})}
                 />
               );
             })}
           </Stack>
+          {picked.length > 1 ? (
+            <Stack gap={3}>
+              <Text variant="eyebrow">Default</Text>
+              <View style={styles.defaults}>
+                {picked.map((m) => (
+                  <Button
+                    key={m}
+                    label={MODEL_INFO[m].name}
+                    kind={brain === m ? "primary" : "secondary"}
+                    small
+                    onPress={() => setBrain(m)}
+                  />
+                ))}
+              </View>
+            </Stack>
+          ) : null}
         </Stack>
       ) : null}
 
       {step === "key" ? (
         <Stack gap={6} key="key">
-          {justConnected || brainAccess === "connected" ? (
+          {!queue.length ? (
             <>
               <Hero
                 icon="check"
-                title={`${brainInfo.name} is connected`}
-                body={`Relay answers with your ${brainInfo.company} account. Want another one for prefixes like ${AI_PROVIDERS.perplexity.prefix}?`}
+                title={connectedPicks.length ? "You're connected" : "Connect them anytime"}
+                body={
+                  connectedPicks.length
+                    ? `${connectedPicks.map((m) => MODEL_INFO[m].name).join(" and ")} ${connectedPicks.length > 1 ? "answer" : "answers"} from your own account${connectedPicks.length > 1 ? "s" : ""}.`
+                    : "Settings has AI accounts whenever you want to sign in."
+                }
               />
               <ListGroup>
-                {MODELS.filter((m) => m !== brain).map((m) => {
-                  const access = modelAccess(me, m);
+                {MODELS.map((m) => {
+                  const state = modelAccess(me, m);
                   return (
                     <ListRow
                       key={m}
                       icon={MODEL_INFO[m].icon}
-                      title={`${MODEL_INFO[m].name}`}
+                      title={MODEL_INFO[m].name}
                       subtitle={`${MODEL_INFO[m].prefix} · ${MODEL_INFO[m].blurb}`}
                       onPress={() => router.push(`/ai/${m}`)}
                       accessory={
-                        <Chip label={access === "connected" ? "Connected" : "Connect"} tone={access === "connected" ? "success" : "text"} />
+                        <Chip label={state === "connected" ? "Connected" : "Connect"} tone={state === "connected" ? "success" : "text"} />
                       }
                     />
                   );
@@ -284,15 +314,20 @@ export default function Setup() {
                 body={
                   useKey
                     ? `Relay sends requests straight to the ${AI_PROVIDERS[conn.provider].company} API with your key. Nothing lands in your ${AI_PROVIDERS[conn.provider].name} history.`
-                    : `Sign in once, and your texts become chats in your own ${brainInfo.name} history, answered on your ${brainInfo.planName} plan.`
+                    : `Sign in once, and your texts become chats in your own ${info.name} history, answered on your ${info.planName} plan.`
                 }
               />
+              {queue.length > 1 ? (
+                <Text variant="caption">
+                  {queue.length} to go: {queue.map((m) => MODEL_INFO[m].name).join(", ")}
+                </Text>
+              ) : null}
               {useKey ? (
                 <AiConnectForm conn={conn} />
               ) : (
                 <Stack gap={4}>
-                  <Point icon="message-square">Text Relay and it shows up in {brainInfo.name} like you typed it there.</Point>
-                  <Point icon="credit-card">Answers come off your {brainInfo.planName} plan, not a separate API bill.</Point>
+                  <Point icon="message-square">Text Relay and it shows up in {info.name} like you typed it there.</Point>
+                  <Point icon="credit-card">Answers come off your {info.planName} plan, not a separate API bill.</Point>
                   <Point icon="lock">You sign in yourself on the next screen. Relay never sees your password.</Point>
                 </Stack>
               )}
@@ -385,5 +420,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   point: { flexDirection: "row", gap: space[3], alignItems: "flex-start" },
+  defaults: { flexDirection: "row", gap: space[2], flexWrap: "wrap" },
   contact: { flexDirection: "row", alignItems: "center", gap: space[3] },
 });
