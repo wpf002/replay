@@ -19,6 +19,11 @@ export function setApiToken(value: string | null): void {
   token = value;
 }
 
+/** Auth header for requests the app doesn't make through api(), like images. */
+export function authHeaders(): Record<string, string> {
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
+
 /** Called when the API rejects the session, so the app can sign out. */
 export function setUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler;

@@ -35,6 +35,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="pin" options={{ presentation: "modal" }} />
           <Stack.Screen name="ai/[provider]" options={{ presentation: "modal" }} />
+          <Stack.Screen name="browser-signin" options={{ presentation: "modal" }} />
           <Stack.Screen name="memories" options={{ presentation: "card" }} />
           <Stack.Screen name="reminders" options={{ presentation: "card" }} />
         </Stack>

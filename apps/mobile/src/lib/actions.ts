@@ -5,6 +5,8 @@ const TYPES: Record<string, { label: string; icon: IconName }> = {
   gmail_send: { label: "Send email", icon: "mail" },
   calendar_create: { label: "Add to calendar", icon: "calendar" },
   place_call: { label: "Call a business", icon: "phone-outgoing" },
+  use_computer: { label: "Use Relay's browser", icon: "globe" },
+  computer_confirm: { label: "Finish on the web", icon: "globe" },
   remember: { label: "Save to memory", icon: "bookmark" },
   forget: { label: "Forget", icon: "trash-2" },
   set_reminder: { label: "Set a reminder", icon: "bell" },

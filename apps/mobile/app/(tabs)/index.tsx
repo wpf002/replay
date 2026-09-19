@@ -1,4 +1,4 @@
-import type { ActionDTO } from "@relay/types";
+import type { ActionDTO, ComputerTaskDTO } from "@relay/types";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -7,6 +7,7 @@ import { dollars, formatPhone, greeting, initials } from "../../src/lib/format";
 import { canUse, MODEL_INFO, modelAccess } from "../../src/lib/models";
 import { callRelay, openMessages, relayNumber } from "../../src/lib/relay";
 import { useMe, useSession } from "../../src/lib/session";
+import { isActive, useLive } from "../../src/lib/tasks";
 import { useApi } from "../../src/lib/use-api";
 import { font, radius, space, useTheme } from "../../src/theme";
 import {
@@ -26,19 +27,25 @@ import {
   Text,
 } from "../../src/ui";
 import { ApprovalCard } from "../../src/ui/approval-card";
+import { TaskRow } from "../../src/ui/task-row";
 
 export default function Home() {
   const me = useMe();
   const { refresh: refreshMe } = useSession();
   const { colors } = useTheme();
   const actions = useApi<{ pending: ActionDTO[]; recent: ActionDTO[] }>("/v1/actions");
+  // Polls while a browser task is running so its status and thumbnail stay current.
+  const tasks = useLive<{ active: ComputerTaskDTO[]; recent: ComputerTaskDTO[] }>("/v1/computer/tasks", 3000, (d) =>
+    d.active.some(isActive),
+  );
+  const browserTasks = [...(tasks.data?.active ?? []), ...(tasks.data?.recent ?? []).slice(0, 3)];
   const number = relayNumber(me.relayNumber);
   const pending = actions.data?.pending ?? [];
   const recent = (actions.data?.recent ?? []).slice(0, 4);
   const firstName = me.name?.split(" ")[0];
 
   const reload = async () => {
-    await Promise.all([actions.refresh(), refreshMe()]);
+    await Promise.all([actions.refresh(), refreshMe(), tasks.refresh()]);
   };
 
   // Counts and the tab badge come from /v1/me; keep them current whenever Home is shown.
@@ -142,6 +149,16 @@ export default function Home() {
           />
         )}
       </Section>
+
+      {browserTasks.length ? (
+        <Section title="Relay's browser">
+          <Stack gap={2}>
+            {browserTasks.map((t) => (
+              <TaskRow key={t.id} task={t} />
+            ))}
+          </Stack>
+        </Section>
+      ) : null}
 
       {todo.length ? (
         <Section title="Finish setting up">

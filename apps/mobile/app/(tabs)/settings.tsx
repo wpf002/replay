@@ -69,6 +69,19 @@ export default function Settings() {
       );
     });
 
+  const signOutSites = () =>
+    Alert.alert("Sign out of all sites?", "Relay's browser forgets every site you signed in to. Tasks will ask you to sign in again.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: () => void run("sites", async () => {
+          await api("/v1/computer/profile", { method: "DELETE" });
+          Alert.alert("Signed out", "Relay's browser is signed out of every site.");
+        }),
+      },
+    ]);
+
   const signOutEverywhere = () =>
     Alert.alert("Sign out everywhere?", "Every device signed in to Relay, including this one, will need to sign in again.", [
       { text: "Cancel", style: "cancel" },
@@ -210,6 +223,19 @@ export default function Settings() {
               )
             }
           />
+        </ListGroup>
+      </Section>
+
+      <Section title="Relay's browser">
+        <ListGroup>
+          <ListRow
+            icon="log-in"
+            title="Sign in to a site"
+            subtitle="So Relay can book and order with your accounts"
+            onPress={() => router.push("/browser-signin")}
+            chevron
+          />
+          <ListRow icon="log-out" title="Sign out of all sites" onPress={signOutSites} accessory={busy === "sites" ? <Chip label="Working" /> : undefined} />
         </ListGroup>
       </Section>
 
