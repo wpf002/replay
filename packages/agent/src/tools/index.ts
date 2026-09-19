@@ -1,4 +1,5 @@
 import { calendarCreate, calendarList } from "./calendar.js";
+import { checkCallTarget, placeCall } from "./calls.js";
 import { gmailRead, gmailSearch, gmailSend } from "./gmail.js";
 import { forget, remember } from "./memory.js";
 import { cancelReminderTool, listReminders, setReminder } from "./reminders.js";
@@ -6,9 +7,12 @@ import type { AnyTool } from "./types.js";
 import { endCall, followUpByText, textMe } from "./voice.js";
 import { webSearch } from "./web.js";
 
+export * from "./outbound.js";
 export * from "./types.js";
 export {
   calendarCreate,
+  checkCallTarget,
+  placeCall,
   calendarList,
   cancelReminderTool,
   endCall,
@@ -36,6 +40,7 @@ const ALL: AnyTool[] = [
   gmailSend,
   calendarList,
   calendarCreate,
+  placeCall,
   textMe,
   followUpByText,
   endCall,

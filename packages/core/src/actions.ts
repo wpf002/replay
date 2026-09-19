@@ -1,4 +1,5 @@
-import { getPrisma, type Action } from "@relay/db";
+import { getPrisma, type Action, type Prisma } from "@relay/db";
+import { textUser } from "./conversations.js";
 import { enqueueAction } from "./queues.js";
 
 /**
@@ -20,6 +21,31 @@ export async function confirmActions(userId: string, actionIds: string[]): Promi
     }
   }
   return confirmed;
+}
+
+/**
+ * Settles a RUNNING action that finished on its own (a business call) and texts the user the
+ * result. Only the first caller wins, so the call session and Twilio's status callback can't
+ * both report it.
+ */
+export async function settleRunningAction(
+  actionId: string,
+  result: { ok: boolean; message: string; data?: Record<string, unknown> },
+): Promise<boolean> {
+  const prisma = getPrisma();
+  const { count } = await prisma.action.updateMany({
+    where: { id: actionId, status: "RUNNING" },
+    data: {
+      status: result.ok ? "SUCCEEDED" : "FAILED",
+      result: { message: result.message, ...(result.data ?? {}) } as Prisma.InputJsonValue,
+      completedAt: new Date(),
+      ...(result.ok ? {} : { error: result.message }),
+    },
+  });
+  if (count !== 1) return false;
+  const action = await prisma.action.findUniqueOrThrow({ where: { id: actionId }, include: { user: true } });
+  await textUser({ user: action.user, body: result.message, metadata: { kind: "call-result", actionId } });
+  return true;
 }
 
 export async function denyActions(userId: string, actionIds: string[]): Promise<number> {

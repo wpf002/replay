@@ -21,6 +21,8 @@ export interface ToolContext {
   conversationId: string;
   /** Inbound message this turn answers, when there is one. */
   sourceMessageId?: string;
+  /** Set when the worker runs an approved Action. */
+  actionId?: string;
   now: Date;
   hasGoogle: boolean;
   /** Called for every model request a tool makes, so spend caps see it. */

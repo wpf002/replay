@@ -1,8 +1,11 @@
+import { placeCall } from "@relay/agent";
 import {
+  conversationRelayTwiml,
   dailySpend,
   env,
-  publicApiUrl,
   rateLimit,
+  relayUrl,
+  settleRunningAction,
   toE164,
   twiml,
   validTwilioSignature,
@@ -12,6 +15,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { sendTwiml, verifyTwilio } from "../plugins/twilio-auth.js";
 import { InboundCall } from "../voice/inbound-call.js";
+import { OutboundCall } from "../voice/outbound-call.js";
 import { parseRelayMessage, RelaySocket } from "../voice/relay.js";
 
 const incoming = z.object({
@@ -20,30 +24,6 @@ const incoming = z.object({
   // STIR/SHAKEN result for the caller ID, when the originating carrier signed the call.
   StirVerstat: z.string().optional(),
 });
-
-/** wss:// URL Twilio connects to. Twilio signs the upgrade request with this exact URL. */
-export function relayUrl(): string {
-  return publicApiUrl("/voice/ws").replace(/^http/, "ws");
-}
-
-export function conversationRelay(
-  res: InstanceType<ReturnType<typeof twiml>["VoiceResponse"]>,
-  opts: { greeting?: string; parameters: Record<string, string> },
-): void {
-  const e = env();
-  const connect = res.connect({ action: publicApiUrl("/twilio/voice/done") });
-  const relay = connect.conversationRelay({
-    url: relayUrl(),
-    ...(opts.greeting ? { welcomeGreeting: opts.greeting, welcomeGreetingInterruptible: "any" } : {}),
-    interruptible: "any",
-    dtmfDetection: true,
-    language: "en-US",
-    hints: "Relay, Claude, GPT, ChatGPT, Perplexity",
-    ...(e.VOICE_TTS_PROVIDER ? { ttsProvider: e.VOICE_TTS_PROVIDER } : {}),
-    ...(e.VOICE_NAME ? { voice: e.VOICE_NAME } : {}),
-  });
-  for (const [name, value] of Object.entries(opts.parameters)) relay.parameter({ name, value });
-}
 
 function sayAndHangUp(reply: FastifyReply, line: string): FastifyReply {
   const res = new (twiml().VoiceResponse)();
@@ -83,16 +63,18 @@ export async function twilioVoiceRoutes(app: FastifyInstance): Promise<void> {
       update: {},
     });
     const greeting = user.name ? `Hi ${user.name.split(" ")[0]}, it's Relay.` : "Hi, it's Relay.";
-    const res = new (twiml().VoiceResponse)();
-    conversationRelay(res, {
-      greeting,
-      parameters: {
-        conversationId: conversation.id,
-        verified: StirVerstat?.startsWith("TN-Validation-Passed-A") ? "1" : "0",
+    return sendTwiml(
+      reply,
+      conversationRelayTwiml({
         greeting,
-      },
-    });
-    return sendTwiml(reply, res.toString());
+        parameters: {
+          mode: "inbound",
+          conversationId: conversation.id,
+          verified: StirVerstat?.startsWith("TN-Validation-Passed-A") ? "1" : "0",
+          greeting,
+        },
+      }),
+    );
   });
 
   /** <Connect action>: the ConversationRelay session ended. */
@@ -107,16 +89,51 @@ export async function twilioVoiceRoutes(app: FastifyInstance): Promise<void> {
     return sendTwiml(reply, res.toString());
   });
 
+  /**
+   * Status of calls Relay places. Covers calls that never connected (busy, no answer), where no
+   * relay session exists to report back.
+   */
+  app.post("/twilio/call-status", { preHandler: verifyTwilio }, async (req, reply) => {
+    const { CallSid, CallStatus } = z
+      .object({ CallSid: z.string(), CallStatus: z.string() })
+      .parse(req.body);
+    const conversation = await getPrisma().conversation.findUnique({
+      where: { callSid: CallSid },
+      include: { action: true, _count: { select: { messages: true } } },
+    });
+    const action = conversation?.action;
+    if (conversation && action) {
+      const brief = placeCall.input.safeParse(action.payload);
+      const name = brief.success ? brief.data.businessName : "The business";
+      const missed: Record<string, string> = {
+        busy: "the line was busy",
+        "no-answer": "nobody picked up",
+        failed: "the call couldn't go through",
+        canceled: "the call was canceled",
+      };
+      if (missed[CallStatus]) {
+        await getPrisma().conversation.update({ where: { id: conversation.id }, data: { endedAt: new Date() } });
+        await settleRunningAction(action.id, { ok: false, message: `${name}: ${missed[CallStatus]}. Want me to try again later?` });
+      } else if (CallStatus === "completed" && conversation._count.messages === 0) {
+        await settleRunningAction(action.id, { ok: false, message: `${name}: the call connected but ended before anyone spoke.` });
+      }
+    }
+    return reply.code(204).send();
+  });
+
   app.get("/voice/ws", { websocket: true, preValidation: verifyRelayUpgrade }, (socket, req) => {
     const relay = new RelaySocket(socket);
-    let call: InboundCall | null = null;
+    let call: InboundCall | OutboundCall | null = null;
 
     socket.on("message", async (data) => {
       const message = parseRelayMessage(data.toString());
       if (!message) return;
       try {
         if (message.type === "setup") {
-          const session = new InboundCall(relay, req.log);
+          const session =
+            message.customParameters?.mode === "outbound"
+              ? new OutboundCall(relay, req.log)
+              : new InboundCall(relay, req.log);
           if (await session.start(message)) {
             call = session;
           } else {

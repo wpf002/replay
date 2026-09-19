@@ -66,6 +66,7 @@ export async function processAction(job: Job<ActionJob>): Promise<void> {
     timezone: user.timezone,
     channel: action.channel === "VOICE" ? "voice" : "sms",
     conversationId: action.conversationId ?? "",
+    actionId: action.id,
     now: new Date(),
     hasGoogle: Boolean(google),
     onUsage: (provider, usage, model) =>
