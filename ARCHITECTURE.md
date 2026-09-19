@@ -105,6 +105,7 @@ apps/web       Next.js: landing, waitlist, privacy/terms (needed for 10DLC), acc
 apps/mobile    Expo: onboarding, connections, approvals, settings
 packages/agent     agent loop, router, tool registry
 packages/providers Claude / OpenAI / Perplexity adapters behind one interface
+packages/core      server-side shared code: env, Twilio, queues, Google OAuth, crypto
 packages/db        Prisma schema + client
 packages/types     shared types
 packages/config    tsconfig, eslint, prettier

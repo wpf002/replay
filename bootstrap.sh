@@ -3,6 +3,14 @@
 # Idempotent: rewrites scaffold files, never touches .env.
 set -euo pipefail
 
+# The scaffold has since been built on. Re-running would overwrite real code (index files,
+# package.json, schema), so it stops unless FORCE=1.
+if [ -f apps/api/src/app.ts ] && [ "${FORCE:-}" != "1" ]; then
+  echo "This repo is past the scaffold stage; bootstrap.sh would overwrite product code."
+  echo "Use 'pnpm install' to set up a clone. Re-run with FORCE=1 only on an empty directory."
+  exit 1
+fi
+
 command -v pnpm >/dev/null || { echo "pnpm required: corepack enable"; exit 1; }
 node -e 'const [a,b]=process.versions.node.split(".").map(Number);if(a<22||(a===22&&b<12)){console.error("Node >=22.12 required");process.exit(1)}'
 
@@ -68,10 +76,10 @@ w turbo.json <<'EOF'
   "globalEnv": ["NODE_ENV"],
   "tasks": {
     "db:generate": { "cache": false },
-    "build": { "dependsOn": ["^build", "^db:generate"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
+    "build": { "dependsOn": ["^build", "db:generate"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
     "dev": { "dependsOn": ["^build"], "cache": false, "persistent": true },
     "lint": {},
-    "typecheck": { "dependsOn": ["^build"] },
+    "typecheck": { "dependsOn": ["^build", "db:generate"] },
     "test": { "dependsOn": ["^build"] },
     "db:migrate": { "cache": false }
   }
@@ -266,8 +274,8 @@ w packages/db/package.json <<'EOF'
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "build": "prisma generate && tsc -p tsconfig.json",
-    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src"
   },
   "dependencies": {
