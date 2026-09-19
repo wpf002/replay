@@ -1,3 +1,4 @@
+import { parseConfirmation, pendingActions } from "@relay/agent";
 import {
   addMessage,
   currentSmsConversation,
@@ -11,6 +12,7 @@ import { getPrisma, Prisma } from "@relay/db";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { sendTwiml, verifyTwilio } from "../plugins/twilio-auth.js";
+import { applySmsConfirmation } from "../sms/confirmations.js";
 import { classifyKeyword, helpText, unknownNumberText } from "../sms/keywords.js";
 
 const inbound = z.object({
@@ -93,9 +95,31 @@ export async function twilioSmsRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
 
+    const markHandled = () =>
+      prisma.message.update({ where: { id: message.id }, data: { handledAt: new Date() } });
+
     if (photoOnly) {
-      await prisma.message.update({ where: { id: message.id }, data: { handledAt: new Date() } });
+      await markHandled();
       return respond(reply, "I can't open photos yet. Tell me in words what you need.");
+    }
+
+    // A short YES/NO while something awaits approval answers that request instead of starting a
+    // new agent turn. Anything longer goes to the agent, which sees the pending request.
+    const pending = await pendingActions(user.id);
+    const confirmation = pending.length ? parseConfirmation(Body) : null;
+    if (confirmation) {
+      await markHandled();
+      const text = await applySmsConfirmation(user, pending, confirmation);
+      if (text) {
+        await addMessage({
+          conversationId: conversation.id,
+          direction: "OUTBOUND",
+          role: "ASSISTANT",
+          content: text,
+          metadata: { kind: "confirmation" },
+        });
+      }
+      return respond(reply, text ?? undefined);
     }
 
     await enqueueTurn({ userId: user.id, messageId: message.id }, MessageSid);

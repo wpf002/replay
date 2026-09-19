@@ -61,3 +61,14 @@ export function startOfDay(timeZone: string, now = new Date()): Date {
   const midnightUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
   return new Date(midnightUtc - offsetMin * 60_000);
 }
+
+/** "Tue, Sep 23, 3:00 PM – 4:00 PM" (end time omitted when it's on another day). */
+export function formatRange(start: Date, end: Date | null, timeZone: string): string {
+  const day = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short", month: "short", day: "numeric" });
+  const time = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" });
+  const first = `${day.format(start)}, ${time.format(start)}`;
+  if (!end) return first;
+  return day.format(start) === day.format(end)
+    ? `${first} – ${time.format(end)}`
+    : `${first} – ${day.format(end)}, ${time.format(end)}`;
+}

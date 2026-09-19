@@ -1,11 +1,22 @@
+import { calendarCreate, calendarList } from "./calendar.js";
+import { gmailRead, gmailSearch, gmailSend } from "./gmail.js";
 import { forget, remember } from "./memory.js";
 import type { AnyTool } from "./types.js";
 import { webSearch } from "./web.js";
 
 export * from "./types.js";
-export { forget, remember, webSearch };
+export { calendarCreate, calendarList, forget, gmailRead, gmailSearch, gmailSend, remember, webSearch };
 
-const ALL: AnyTool[] = [webSearch, remember, forget];
+const ALL: AnyTool[] = [
+  webSearch,
+  remember,
+  forget,
+  gmailSearch,
+  gmailRead,
+  gmailSend,
+  calendarList,
+  calendarCreate,
+];
 
 /** Tools available for this person on this channel. */
 export function toolsFor(opts: { channel: "sms" | "voice"; hasGoogle: boolean }): AnyTool[] {

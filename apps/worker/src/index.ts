@@ -2,12 +2,16 @@ import { closeQueues, closeRedis, env, log, QUEUE } from "@relay/core";
 import { getPrisma } from "@relay/db";
 import { Worker } from "bullmq";
 import { Redis } from "ioredis";
+import { processAction } from "./actions.js";
 import { processTurn } from "./turns.js";
 
 // Workers hold blocking connections, so they get their own instead of sharing the producer's.
 const connection = new Redis(env().REDIS_URL, { maxRetriesPerRequest: null });
 
-const workers = [new Worker(QUEUE.turns, processTurn, { connection, concurrency: 8 })];
+const workers = [
+  new Worker(QUEUE.turns, processTurn, { connection, concurrency: 8 }),
+  new Worker(QUEUE.actions, processAction, { connection, concurrency: 4 }),
+];
 
 for (const worker of workers) {
   worker.on("failed", (job, err) => {

@@ -5,7 +5,13 @@ import { env, logOptions, NotConfiguredError, UserError } from "@relay/core";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { healthRoutes } from "./routes/health.js";
+import { oauthGoogleRoutes } from "./routes/oauth-google.js";
 import { twilioSmsRoutes } from "./routes/twilio-sms.js";
+import { actionRoutes } from "./routes/v1/actions.js";
+import { authRoutes } from "./routes/v1/auth.js";
+import { connectionRoutes } from "./routes/v1/connections.js";
+import { historyRoutes } from "./routes/v1/history.js";
+import { meRoutes } from "./routes/v1/me.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -14,6 +20,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(sensible);
   await app.register(formbody);
   await app.register(cors, { origin: [env().PUBLIC_WEB_URL] });
+  app.decorateRequest("user", null);
 
   app.setErrorHandler((err: FastifyError, req, reply) => {
     if (err instanceof NotConfiguredError) {
@@ -23,8 +30,9 @@ export async function buildApp(): Promise<FastifyInstance> {
       return reply.code(err.status).send({ error: err.message });
     }
     if (err instanceof ZodError) {
+      const first = err.issues[0];
       return reply.code(400).send({
-        error: "Invalid request",
+        error: first?.message ?? "Invalid request",
         issues: err.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
       });
     }
@@ -37,7 +45,18 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(healthRoutes);
   await app.register(twilioSmsRoutes);
-  await app.register(waitlistRoutes, { prefix: "/v1" });
+  await app.register(oauthGoogleRoutes);
+  await app.register(
+    async (v1) => {
+      await v1.register(waitlistRoutes);
+      await v1.register(authRoutes);
+      await v1.register(meRoutes);
+      await v1.register(connectionRoutes);
+      await v1.register(actionRoutes);
+      await v1.register(historyRoutes);
+    },
+    { prefix: "/v1" },
+  );
 
   return app;
 }

@@ -24,9 +24,9 @@ export function approvalGate(opts: {
         data: { status: "EXPIRED", error: "Replaced by a newer request" },
       });
     }
-    // Calls always need the PIN, since caller ID can be spoofed. Over SMS, only high-risk
-    // actions do, and only once a PIN exists.
-    const requiresPin = opts.channel === "VOICE" || (req.risk === "HIGH" && opts.pinSet);
+    // Caller ID can be spoofed, so on calls every approval needs the PIN. Over SMS only high-risk
+    // actions do. Without a PIN set, approval falls back to a YES by text.
+    const requiresPin = opts.pinSet && (opts.channel === "VOICE" || req.risk === "HIGH");
     const action = await prisma.action.create({
       data: {
         userId: opts.userId,

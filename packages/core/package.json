@@ -21,6 +21,7 @@
     "@relay/db": "workspace:*",
     "@relay/types": "workspace:*",
     "bullmq": "6.3.8",
+    "googleapis": "181.0.0",
     "ioredis": "6.0.0",
     "libphonenumber-js": "1.13.13",
     "pino": "10.3.1",
