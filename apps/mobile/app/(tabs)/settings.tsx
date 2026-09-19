@@ -157,12 +157,12 @@ export default function Settings() {
                 title={MODEL_INFO[m].name}
                 subtitle={
                   access === "connected"
-                    ? `Your ${MODEL_INFO[m].by} key ${account?.hint ?? ""}${me.defaultModel === m ? " · Default" : ""}`
+                    ? `${account?.mode === "browser" ? "Signed in to your account" : `Your ${MODEL_INFO[m].by} key ${account?.hint ?? ""}`}${me.defaultModel === m ? " · Default" : ""}`
                     : access === "invalid"
                       ? "Key stopped working. Tap to update it."
                       : access === "included"
                         ? `Included up to a daily limit${me.defaultModel === m ? " · Default" : ""}`
-                        : `Connect to use ${MODEL_INFO[m].prefix}`
+                        : `Sign in so ${MODEL_INFO[m].prefix} uses your account`
                 }
                 onPress={() => router.push(`/ai/${m}`)}
                 accessory={

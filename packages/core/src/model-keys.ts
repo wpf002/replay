@@ -21,12 +21,31 @@ export function includedModels(): ModelId[] {
 
 export async function saveModelKey(userId: string, provider: ModelId, apiKey: string): Promise<void> {
   const key = apiKey.trim();
-  const data = { keyEnc: encryptSecret(key), hint: `…${key.slice(-4)}`, invalidAt: null };
+  const data = { mode: "key", keyEnc: encryptSecret(key), hint: `…${key.slice(-4)}`, invalidAt: null };
   await getPrisma().modelKey.upsert({
     where: { userId_provider: { userId, provider: toDbModel(provider) } },
     create: { userId, provider: toDbModel(provider), ...data },
     update: data,
   });
+}
+
+/**
+ * Marks a provider as connected through Relay's browser: the person signed in to its app, so
+ * their texts become threads in their own account, on their own subscription.
+ */
+export async function connectBrowserAccount(userId: string, provider: ModelId): Promise<void> {
+  const data = { mode: "browser", keyEnc: null, hint: null, invalidAt: null };
+  await getPrisma().modelKey.upsert({
+    where: { userId_provider: { userId, provider: toDbModel(provider) } },
+    create: { userId, provider: toDbModel(provider), ...data },
+    update: data,
+  });
+}
+
+/** Providers whose answers come from the person's own account in Relay's browser. */
+export async function browserAccounts(userId: string): Promise<ModelId[]> {
+  const rows = await getPrisma().modelKey.findMany({ where: { userId, mode: "browser" }, select: { provider: true } });
+  return rows.map((r) => fromDbModel(r.provider));
 }
 
 export async function deleteModelKey(userId: string, provider: ModelId): Promise<void> {
@@ -35,9 +54,9 @@ export async function deleteModelKey(userId: string, provider: ModelId): Promise
 
 /** Decrypted keys that still work, by provider. */
 export async function userModelKeys(userId: string): Promise<UserKeys> {
-  const rows = await getPrisma().modelKey.findMany({ where: { userId, invalidAt: null } });
+  const rows = await getPrisma().modelKey.findMany({ where: { userId, mode: "key", invalidAt: null } });
   const keys: UserKeys = {};
-  for (const row of rows) keys[fromDbModel(row.provider)] = decryptSecret(row.keyEnc);
+  for (const row of rows) if (row.keyEnc) keys[fromDbModel(row.provider)] = decryptSecret(row.keyEnc);
   return keys;
 }
 
@@ -55,6 +74,7 @@ export async function aiAccounts(userId: string): Promise<AiAccountDTO[]> {
     return {
       provider,
       connected: Boolean(row),
+      mode: row?.mode === "browser" ? "browser" : "key",
       hint: row?.hint ?? null,
       invalid: Boolean(row?.invalidAt),
       connectedAt: row?.createdAt.toISOString() ?? null,

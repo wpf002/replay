@@ -193,8 +193,8 @@ export default async function AccountPage({
             <section className={styles.card}>
               <h2 className={styles.h3}>AI accounts</h2>
               <p className="muted">
-                Connect the AIs you use with an API key from each provider. Relay encrypts keys and only sends them to
-                that provider.
+                Sign in to ChatGPT, Claude, or Perplexity from the Relay app and your texts become chats in your own
+                history, on your own plan. An API key works too, and stays on Relay's server, encrypted.
               </p>
               <AiAccounts accounts={me.aiAccounts} included={me.includedModels} />
             </section>

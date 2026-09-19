@@ -1,4 +1,4 @@
-import { AI_PROVIDERS, MODELS, type MeDTO } from "@relay/types";
+import { AI_PROVIDERS, MODELS, type ComputerTaskDTO, type MeDTO } from "@relay/types";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
@@ -21,14 +21,34 @@ export default function AiAccount() {
   const { setMe } = useSession();
   const { colors } = useTheme();
   const [replacing, setReplacing] = useState(false);
+  const [useKey, setUseKey] = useState(false);
   const [busy, setBusy] = useState(false);
-  const conn = useAiConnect(initial, () => setReplacing(false));
+  const conn = useAiConnect(initial, () => {
+    setReplacing(false);
+    setUseKey(false);
+  });
 
   const provider = conn.provider;
   const info = AI_PROVIDERS[provider];
   const account = me.aiAccounts.find((a) => a.provider === provider);
   const access = modelAccess(me, provider);
-  const showForm = !account?.connected || account.invalid || replacing;
+  const connected = Boolean(account?.connected) && !account?.invalid;
+  const signedIn = connected && account?.mode === "browser";
+  // Connecting shows the two ways in; the key form only when they pick it.
+  const showForm = (!connected || replacing) && useKey;
+  const showChoice = !connected || replacing;
+
+  async function signIn() {
+    setBusy(true);
+    try {
+      const task = await api<ComputerTaskDTO>(`/v1/ai-accounts/${provider}/signin`, { body: {} });
+      router.replace(`/task/${task.id}`);
+    } catch (err) {
+      Alert.alert("Couldn't open it", err instanceof ApiError ? err.message : "Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function patch(fn: () => Promise<MeDTO>) {
     setBusy(true);
@@ -69,12 +89,18 @@ export default function AiAccount() {
         disabled={!conn.key || Boolean(conn.otherProvider)}
         onPress={() => void conn.connect()}
       />
-      {replacing ? <Button label="Keep the current key" kind="ghost" block onPress={() => setReplacing(false)} /> : null}
+      <Button label="Back" kind="ghost" block onPress={() => setUseKey(false)} />
+    </Stack>
+  ) : showChoice ? (
+    <Stack gap={2}>
+      <Button label={`Sign in to ${info.name}`} icon="log-in" block loading={busy} onPress={() => void signIn()} />
+      <Button label="Use an API key instead" kind="ghost" block onPress={() => setUseKey(true)} />
+      {replacing ? <Button label="Never mind" kind="ghost" block onPress={() => setReplacing(false)} /> : null}
     </Stack>
   ) : (
     <Stack gap={2}>
       <Button label="Done" block onPress={() => router.back()} />
-      <Button label="Replace key" kind="secondary" block onPress={() => setReplacing(true)} />
+      <Button label={signedIn ? "Sign in again" : "Replace key"} kind="secondary" block onPress={() => (signedIn ? void signIn() : setReplacing(true))} />
       <Button label="Disconnect" kind="danger" block loading={busy} onPress={disconnect} />
     </Stack>
   );
@@ -87,10 +113,10 @@ export default function AiAccount() {
         title={showForm ? `Connect ${info.name}` : info.name}
         body={
           showForm
-            ? access === "included"
-              ? `Relay includes ${info.name} up to a daily limit. Your own key removes the limit and bills your ${info.company} account.`
-              : `Relay uses your ${info.company} API key to answer with ${info.name}.`
-            : undefined
+            ? `Relay sends requests straight to the ${info.company} API with your key. Nothing shows up in your ${info.name} history, and usage bills to your API account.`
+            : showChoice
+              ? `Relay signs in to ${info.name} in its own browser. Your texts become chats in your ${info.name} history, answered on your ${info.planName} plan.`
+              : undefined
         }
       />
 
@@ -103,6 +129,36 @@ export default function AiAccount() {
         </Card>
       ) : null}
 
+      {showChoice && !showForm ? (
+        <Stack gap={3}>
+          <Card style={{ gap: space[3] }}>
+            <View style={styles.point}>
+              <Icon name="message-square" size={18} tone="textMuted" />
+              <Text variant="body" style={{ flex: 1 }}>
+                Text Relay, and the chat shows up in {info.name} like you typed it there yourself.
+              </Text>
+            </View>
+            <View style={styles.point}>
+              <Icon name="credit-card" size={18} tone="textMuted" />
+              <Text variant="body" style={{ flex: 1 }}>
+                Answers come off your {info.planName} plan, not a separate API bill.
+              </Text>
+            </View>
+            <View style={styles.point}>
+              <Icon name="lock" size={18} tone="textMuted" />
+              <Text variant="body" style={{ flex: 1 }}>
+                You sign in yourself on the next screen. Relay never sees your password.
+              </Text>
+            </View>
+          </Card>
+          {access === "included" ? (
+            <Text variant="caption">
+              Until then, Relay answers with its own {info.name} access, up to a daily limit.
+            </Text>
+          ) : null}
+        </Stack>
+      ) : null}
+
       {showForm ? (
         <AiConnectForm conn={conn} />
       ) : (
@@ -113,8 +169,8 @@ export default function AiAccount() {
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <Text variant="bodyMedium">{info.name}</Text>
-              <Text variant="mono" color="textMuted">
-                Key {account?.hint ?? ""}
+              <Text variant={signedIn ? "body" : "mono"} color="textMuted">
+                {signedIn ? `Signed in · your ${info.planName} plan` : `Key ${account?.hint ?? ""}`}
               </Text>
               {account?.connectedAt ? <Text variant="caption">Connected {shortDate(account.connectedAt)}</Text> : null}
             </View>
@@ -124,7 +180,9 @@ export default function AiAccount() {
           <Card style={{ gap: space[3] }}>
             {me.defaultModel === provider ? (
               <Text variant="body">
-                {info.name} answers your texts and calls. Start a text with another prefix to switch for one message.
+                {signedIn
+                  ? `Every text you send Relay goes into ${info.name} and comes back as a reply. Start a text with another prefix to switch for one message.`
+                  : `${info.name} answers your texts and calls. Start a text with another prefix to switch for one message.`}
               </Text>
             ) : (
               <>
@@ -142,7 +200,7 @@ export default function AiAccount() {
               </>
             )}
           </Card>
-          <Text variant="caption">{info.billingNote}</Text>
+          {signedIn ? null : <Text variant="caption">{info.billingNote}</Text>}
         </Stack>
       )}
     </Screen>
@@ -150,6 +208,7 @@ export default function AiAccount() {
 }
 
 const styles = StyleSheet.create({
+  point: { flexDirection: "row", gap: space[3], alignItems: "flex-start" },
   connected: { flexDirection: "row", alignItems: "center", gap: space[3] },
   mark: {
     width: 48,

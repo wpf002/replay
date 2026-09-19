@@ -89,9 +89,11 @@ model ModelKey {
   id        String    @id @default(cuid())
   userId    String
   provider  ModelId
-  keyEnc    String
-  // Last four characters, for display. The key itself is never returned by the API.
-  hint      String
+  // "key": their API key, below. "browser": signed in to the provider's site in Relay's browser.
+  mode      String    @default("key")
+  keyEnc    String?
+  // Last four characters of the key, for display. The key itself is never returned by the API.
+  hint      String?
   // Set when the provider rejects the key during use (revoked, out of credit).
   invalidAt DateTime?
   createdAt DateTime  @default(now())
@@ -269,7 +271,12 @@ model ComputerTask {
   goal           String
   startUrl       String?
   // "browse": the model drives. "signin": the person signs in to a site themselves; no model.
+  // "chat": one message sent in the person's own ChatGPT, Claude, or Perplexity account.
   mode           String             @default("browse")
+  // For "chat": whose account answered.
+  provider       ModelId?
+  // For "check": how many times Relay has looked back at a long job.
+  round          Int                @default(0)
   status         ComputerTaskStatus @default(QUEUED)
   // While WAITING_USER: "answer" (a question by text) or "takeover" (use the live view).
   waitingKind    String?

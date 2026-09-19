@@ -1,9 +1,9 @@
-import { aiAccounts, deleteModelKey, rateLimit, saveModelKey, UserError } from "@relay/core";
+import { aiAccounts, deleteModelKey, rateLimit, saveModelKey, startComputerTask, UserError } from "@relay/core";
 import { verifyKey } from "@relay/providers";
-import { AI_PROVIDERS, detectKeyProvider, MODELS, type AiAccountDTO, type MeDTO } from "@relay/types";
+import { AI_PROVIDERS, detectKeyProvider, MODELS, type AiAccountDTO, type ComputerTaskDTO, type MeDTO } from "@relay/types";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { toMeDTO } from "../../lib/dto.js";
+import { toComputerTaskDTO, toMeDTO } from "../../lib/dto.js";
 import { currentUser, requireUser } from "../../plugins/auth.js";
 
 const params = z.object({ provider: z.enum(MODELS) });
@@ -16,6 +16,22 @@ export async function aiAccountRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", requireUser);
 
   app.get("/ai-accounts", async (req): Promise<AiAccountDTO[]> => aiAccounts(currentUser(req).id));
+
+  /**
+   * Connects the account itself: Relay opens the provider's app in its browser and the person
+   * signs in there. After that, their texts become chats in their own history, on their plan.
+   */
+  app.post("/ai-accounts/:provider/signin", async (req): Promise<ComputerTaskDTO> => {
+    const { provider } = params.parse(req.params);
+    const info = AI_PROVIDERS[provider];
+    const task = await startComputerTask(currentUser(req).id, {
+      goal: `Sign in to ${info.name}`,
+      startUrl: info.signInUrl,
+      mode: "signin",
+      provider,
+    });
+    return toComputerTaskDTO(task, { steps: [] });
+  });
 
   /** Checks the key with the provider, then saves it encrypted. Replaces any key already there. */
   app.put("/ai-accounts/:provider", async (req): Promise<MeDTO> => {

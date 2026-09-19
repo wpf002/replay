@@ -141,6 +141,12 @@ export interface AiProviderInfo {
   keyPrefix: string;
   /** Where a person adds credit to their API account. */
   billingUrl: string;
+  /** The provider's own chat app, where Relay opens threads in the person's account. */
+  chatUrl: string;
+  /** Where that app asks them to sign in. */
+  signInUrl: string;
+  /** What the subscription is called, for "your ChatGPT Plus plan". */
+  planName: string;
   /** Why a subscription login isn't enough, and who pays. */
   billingNote: string;
 }
@@ -153,6 +159,9 @@ export const AI_PROVIDERS: Record<ModelId, AiProviderInfo> = {
     keyUrl: "https://console.anthropic.com/settings/keys",
     keyPrefix: "sk-ant-",
     billingUrl: "https://console.anthropic.com/settings/billing",
+    chatUrl: "https://claude.ai/new",
+    signInUrl: "https://claude.ai/login",
+    planName: "Claude Pro or Max",
     billingNote:
       "Anthropic doesn't let other apps use Claude Pro or Max plans, so Relay uses an API key from the Claude Console. Usage bills to that Console account.",
   },
@@ -163,6 +172,9 @@ export const AI_PROVIDERS: Record<ModelId, AiProviderInfo> = {
     keyUrl: "https://platform.openai.com/api-keys",
     keyPrefix: "sk-",
     billingUrl: "https://platform.openai.com/settings/organization/billing/overview",
+    chatUrl: "https://chatgpt.com/",
+    signInUrl: "https://chatgpt.com/auth/login",
+    planName: "ChatGPT",
     billingNote:
       "ChatGPT Plus doesn't include API access, so Relay uses an OpenAI API key. Usage bills to your OpenAI API account.",
   },
@@ -173,6 +185,9 @@ export const AI_PROVIDERS: Record<ModelId, AiProviderInfo> = {
     keyUrl: "https://console.perplexity.ai/project/keys",
     keyPrefix: "pplx-",
     billingUrl: "https://console.perplexity.ai",
+    chatUrl: "https://www.perplexity.ai/",
+    signInUrl: "https://www.perplexity.ai/",
+    planName: "Perplexity",
     billingNote:
       "Relay uses an API key from the Perplexity API console. Usage bills to that account.",
   },
@@ -190,6 +205,11 @@ export function detectKeyProvider(key: string): ModelId | null {
 export interface AiAccountDTO {
   provider: ModelId;
   connected: boolean;
+  /**
+   * "browser": Relay is signed in to the provider's app in its browser, so threads land in the
+   * person's own history on their subscription. "key": their API key, billed per token.
+   */
+  mode: "browser" | "key";
   /** "…a1b2" when connected. */
   hint: string | null;
   /** The provider rejected the key while Relay was using it. */

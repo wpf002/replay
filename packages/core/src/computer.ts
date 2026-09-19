@@ -1,10 +1,11 @@
 import { getPrisma, type ComputerTask } from "@relay/db";
-import type { ComputerInput } from "@relay/types";
+import { AI_PROVIDERS, type ComputerInput, type ModelId } from "@relay/types";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { env } from "./env.js";
 import { UserError } from "./errors.js";
 import { enqueueComputerTask } from "./queues.js";
+import { toDbModel } from "./models.js";
 import { rateLimit } from "./rate-limit.js";
 import { redis } from "./redis.js";
 
@@ -88,7 +89,14 @@ const hostOf = (url: string) => {
  */
 export async function startComputerTask(
   userId: string,
-  opts: { goal: string; startUrl?: string | null; mode?: "browse" | "signin"; conversationId?: string | null },
+  opts: {
+    goal: string;
+    startUrl?: string | null;
+    mode?: "browse" | "signin";
+    conversationId?: string | null;
+    /** For a sign-in to a provider's own app: which account it connects. */
+    provider?: ModelId | null;
+  },
 ): Promise<ComputerTask> {
   const prisma = getPrisma();
   const limit = await rateLimit(`computer:${userId}`, TASKS_PER_DAY, 24 * 60 * 60);
@@ -105,9 +113,53 @@ export async function startComputerTask(
       startUrl: opts.startUrl ?? null,
       mode,
       conversationId: opts.conversationId ?? null,
+      ...(opts.provider ? { provider: toDbModel(opts.provider) } : {}),
     },
   });
   await addComputerStep(task.id, "note", mode === "signin" && opts.startUrl ? `Opening ${hostOf(opts.startUrl)}` : "Starting up");
+  await enqueueComputerTask(task.id);
+  return task;
+}
+
+/**
+ * Sends one message in the person's own ChatGPT, Claude, or Perplexity account. Relay opens the
+ * provider's app in their browser session, so the answer comes from their subscription and the
+ * conversation shows up in that app's history.
+ */
+/**
+ * Comes back to a long job in the person's AI account (a build, deep research) to see whether
+ * it finished, and texts them when it has.
+ */
+export async function scheduleChatCheck(task: ComputerTask, delayMs: number): Promise<void> {
+  const next = await getPrisma().computerTask.create({
+    data: {
+      userId: task.userId,
+      goal: task.goal,
+      mode: "check",
+      provider: task.provider,
+      startUrl: task.url ?? task.startUrl,
+      conversationId: task.conversationId,
+      round: task.round + 1,
+    },
+  });
+  await enqueueComputerTask(next.id, delayMs);
+}
+
+export async function startChatTask(
+  userId: string,
+  opts: { provider: ModelId; message: string; conversationId?: string | null },
+): Promise<ComputerTask> {
+  const task = await getPrisma().computerTask.create({
+    data: {
+      userId,
+      goal: opts.message.trim().slice(0, 2000),
+      mode: "chat",
+      provider: toDbModel(opts.provider),
+      startUrl: AI_PROVIDERS[opts.provider].chatUrl,
+      conversationId: opts.conversationId ?? null,
+    },
+  });
+  await addComputerStep(task.id, "note", `Opening ${AI_PROVIDERS[opts.provider].name}`);
   await enqueueComputerTask(task.id);
   return task;
 }

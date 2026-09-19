@@ -12,6 +12,7 @@ import {
 } from "@relay/agent";
 import {
   acquireLock,
+  browserAccounts,
   fromDbModel,
   keyProblemMessage,
   loadKeyRing,
@@ -21,9 +22,11 @@ import {
   noAccessMessage,
   pushComputerSignal,
   recordUsage,
+  startChatTask as startComputerChat,
   taskAwaitingAnswer,
   textUser,
   toDbModel,
+  UserError,
   type TurnJob,
 } from "@relay/core";
 import { getPrisma } from "@relay/db";
@@ -107,6 +110,17 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
   if (!route.text) {
     await markHandled();
     await reply('Add your question after the prefix, like "@web is Costco open today?"');
+    return;
+  }
+
+  // Providers they signed in to: the message goes into their own account, in their own history.
+  if ((await browserAccounts(user.id)).includes(route.model)) {
+    await markHandled();
+    try {
+      await startComputerChat(user.id, { provider: route.model, message: route.text, conversationId: conversation.id });
+    } catch (err) {
+      await reply(err instanceof UserError ? err.message : "Something went wrong reaching your account. Try again in a minute.");
+    }
     return;
   }
 

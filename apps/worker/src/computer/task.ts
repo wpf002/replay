@@ -4,6 +4,7 @@ import {
   acquireLock,
   addComputerStep,
   browserProfileDir,
+  connectBrowserAccount,
   env,
   keyProblemMessage,
   loadKeyRing,
@@ -14,17 +15,21 @@ import {
   recordUsage,
   redis,
   saveScreen,
+  scheduleChatCheck,
   signalKey,
   textUser,
+  toDbModel,
+  fromDbModel,
   type ComputerJob,
   type ComputerSignal,
 } from "@relay/core";
 import { getPrisma, type ComputerTask, type ComputerTaskStatus, type User } from "@relay/db";
 import { costMicros, keyProblem, OFFICIAL_BASE_URL, parsePrice } from "@relay/providers";
-import { COMPUTER_VIEWPORT, TAKEOVER_VIEWPORT } from "@relay/types";
+import { AI_PROVIDERS, COMPUTER_VIEWPORT, TAKEOVER_VIEWPORT, type ModelId } from "@relay/types";
 import { DelayedError, type Job } from "bullmq";
 import { rm } from "node:fs/promises";
 import { RelayBrowser } from "./browser.js";
+import { runChatTurn } from "./chat.js";
 import { runComputerLoop, type Outcome } from "./loop.js";
 import { COMPUTER_SYSTEM, computerContext } from "./prompt.js";
 
@@ -33,6 +38,8 @@ const WAIT_MS = 30 * 60_000;
 /** Covers a long task plus several waits; the browser profile is locked for this long at most. */
 const LOCK_MS = 3 * 60 * 60_000;
 const APPROVAL_EXPIRY_MS = 30 * 60_000;
+/** When Relay looks back at a long job in the person's AI account, in minutes after the last look. */
+const CHECK_DELAYS_MIN = [2, 5, 10, 20, 30, 60];
 
 // Models that support browser_toolset_20260801.
 const TOOLSET_MODELS = /^claude-(opus-5|sonnet-5|fable-5|mythos-5|opus-4-8)/;
@@ -120,19 +127,20 @@ class TaskRun {
     return this.prisma.computerTask.update({ where: { id: this.task.id }, data });
   }
 
-  private text(body: string, kind = "task") {
+  private text(body: string, kind = "task", model?: ModelId) {
     return textUser({
       user: this.user,
       body,
       ...(this.task.conversationId ? { conversationId: this.task.conversationId } : {}),
+      ...(model ? { model: toDbModel(model) } : {}),
       metadata: { kind, taskId: this.task.id },
     });
   }
 
-  private async end(status: ComputerTaskStatus, summary: string, opts: { notify?: boolean; error?: string } = {}) {
+  private async end(status: ComputerTaskStatus, summary: string, opts: { notify?: boolean; error?: string; model?: ModelId } = {}) {
     await this.update({ status, summary, endedAt: new Date(), waitingKind: null, waitingFor: null, actionId: null, ...(opts.error ? { error: opts.error } : {}) });
     await addComputerStep(this.task.id, "result", summary);
-    if (opts.notify !== false) await this.text(summary);
+    if (opts.notify !== false) await this.text(summary, "reply", opts.model);
   }
 
   /** Publishes the current screen to the live view and keeps the task's URL and title current. */
@@ -186,7 +194,7 @@ class TaskRun {
   async run(): Promise<void> {
     const ring = await loadKeyRing(this.user.id, this.user.timezone);
     const credential = ring.credential("claude");
-    if (this.task.mode === "browse" && credential.source === "none") {
+    if (this.task.mode !== "signin" && credential.source === "none") {
       await this.end("FAILED", noAccessMessage("claude", credential.reason), { error: "no_model_access" });
       return;
     }
@@ -200,9 +208,11 @@ class TaskRun {
       return;
     }
 
+    const apiKey = credential.source === "user" ? credential.apiKey : undefined;
     try {
       if (this.task.mode === "signin") await this.signIn();
-      else await this.browse(credential.source === "user" ? credential.apiKey : undefined, ring.byok("claude"));
+      else if (this.task.mode === "chat" || this.task.mode === "check") await this.chat(apiKey, ring.byok("claude"));
+      else await this.browse(apiKey, ring.byok("claude"));
     } catch (err) {
       log.error({ err, taskId: this.task.id }, "computer task failed");
       await this.end("FAILED", "Something went wrong in Relay's browser, so I stopped. Try again in a bit.", { error: (err as Error).message.slice(0, 500) });
@@ -222,18 +232,52 @@ class TaskRun {
     await this.update({ status: "WAITING_USER", waitingKind: "takeover", waitingFor: `Sign in to ${host}` });
     await addComputerStep(this.task.id, "handoff", `Waiting for you to sign in to ${host}`);
     const result = await this.wait({ takeover: true, on: (s) => (s.type === "resume" ? "done" : null) });
-    if (result === "done") await this.end("SUCCEEDED", `Signed in to ${host}. Relay can use it for tasks now.`, { notify: false });
+    if (result === "done") {
+      // Signing in to ChatGPT, Claude, or Perplexity connects that account for texts.
+      if (this.task.provider) {
+        const provider = fromDbModel(this.task.provider);
+        await connectBrowserAccount(this.user.id, provider);
+        await this.end("SUCCEEDED", `Connected your ${AI_PROVIDERS[provider].name} account. Texts to Relay now land in its history.`, { notify: false });
+        return;
+      }
+      await this.end("SUCCEEDED", `Signed in to ${host}. Relay can use it for tasks now.`, { notify: false });
+    }
     else if (result === "stop") await this.end("CANCELED", "Stopped.", { notify: false });
     else await this.end("FAILED", `Sign-in to ${host} timed out.`, { notify: false });
+  }
+
+  /** The model that drives the browser, on the person's Claude key when they have one. */
+  private claude(apiKey: string | undefined): Anthropic {
+    return apiKey
+      ? new Anthropic({ apiKey, baseURL: OFFICIAL_BASE_URL.claude, maxRetries: 3 })
+      : new Anthropic({ apiKey: need("ANTHROPIC_API_KEY"), maxRetries: 3 });
+  }
+
+  private usageHook(byok: boolean) {
+    const price = parsePrice(env().COMPUTER_PRICE ?? env().CLAUDE_PRICE);
+    return async (u: Anthropic.Usage, servedModel: string) => {
+      const cacheWrite = u.cache_creation_input_tokens ?? 0;
+      const cacheRead = u.cache_read_input_tokens ?? 0;
+      const billedInput = Math.ceil(u.input_tokens + cacheWrite * 1.25 + cacheRead * 0.1);
+      const cost = costMicros(price, billedInput, u.output_tokens);
+      await recordUsage({
+        userId: this.user.id,
+        provider: "claude",
+        model: servedModel,
+        channel: null,
+        inputTokens: u.input_tokens + cacheWrite + cacheRead,
+        outputTokens: u.output_tokens,
+        costMicros: cost,
+        byok,
+      });
+      await this.update({ costMicros: { increment: cost } });
+    };
   }
 
   private async browse(apiKey: string | undefined, byok: boolean): Promise<void> {
     const browser = this.browser!;
     const model = computerModel();
-    const price = parsePrice(env().COMPUTER_PRICE ?? env().CLAUDE_PRICE);
-    const client = apiKey
-      ? new Anthropic({ apiKey, baseURL: OFFICIAL_BASE_URL.claude, maxRetries: 3 })
-      : new Anthropic({ apiKey: need("ANTHROPIC_API_KEY"), maxRetries: 3 });
+    const client = this.claude(apiKey);
     const memories = await this.prisma.memory.findMany({
       where: { userId: this.user.id },
       orderBy: { createdAt: "desc" },
@@ -255,23 +299,7 @@ class TaskRun {
           step: (kind, text) => addComputerStep(this.task.id, kind, text),
           screen: () => this.publishScreen(),
           stopped: () => this.signals.cancelled(),
-          usage: async (u, servedModel) => {
-            const cacheWrite = u.cache_creation_input_tokens ?? 0;
-            const cacheRead = u.cache_read_input_tokens ?? 0;
-            const billedInput = Math.ceil(u.input_tokens + cacheWrite * 1.25 + cacheRead * 0.1);
-            const cost = costMicros(price, billedInput, u.output_tokens);
-            await recordUsage({
-              userId: this.user.id,
-              provider: "claude",
-              model: servedModel,
-              channel: null,
-              inputTokens: u.input_tokens + cacheWrite + cacheRead,
-              outputTokens: u.output_tokens,
-              costMicros: cost,
-              byok,
-            });
-            await this.update({ costMicros: { increment: cost } });
-          },
+          usage: this.usageHook(byok),
           approve: (summary, amount) => this.approve(summary, amount),
           ask: (question) => this.ask(question),
           handOff: (reason) => this.handOff(reason),
@@ -287,6 +315,79 @@ class TaskRun {
 
     const status: Record<Outcome, ComputerTaskStatus> = { done: "SUCCEEDED", failed: "FAILED", blocked: "FAILED", stopped: "CANCELED" };
     await this.end(status[result.outcome], result.summary, { notify: result.outcome !== "stopped" });
+  }
+
+  /**
+   * Sends one text to the person's own ChatGPT, Claude, or Perplexity account and brings the
+   * answer back. Long jobs get a link now and a second text when they finish.
+   */
+  private async chat(apiKey: string | undefined, byok: boolean): Promise<void> {
+    const browser = this.browser!;
+    const provider: ModelId = this.task.provider ? fromDbModel(this.task.provider) : "gpt";
+    const info = AI_PROVIDERS[provider];
+    const checking = this.task.mode === "check";
+    const hooks = {
+      step: (kind: string, text: string) => addComputerStep(this.task.id, kind, text),
+      screen: () => this.publishScreen(),
+      stopped: () => this.signals.cancelled(),
+      usage: this.usageHook(byok),
+    };
+    const turn = (instruction?: string) =>
+      runChatTurn({
+        client: this.claude(apiKey),
+        model: computerModel(),
+        provider,
+        message: this.task.goal,
+        browser,
+        hooks,
+        ...(instruction ? { instruction } : {}),
+      });
+    const checkInstruction = `Earlier they asked ${info.name}: "${this.task.goal}"\n\nThe thread should be on screen. Look at where it got to. If it finished, call answer with the result. If it's still working, call started with one line on where it is. If the thread isn't there, call problem.`;
+
+    try {
+      await browser.run("navigate", { url: this.task.startUrl ?? info.chatUrl });
+      await this.publishScreen();
+      let outcome = await turn(checking ? checkInstruction : undefined);
+
+      if (outcome.kind === "sign_in") {
+        if (checking) {
+          await this.end("FAILED", `I couldn't get back into your ${info.name} account to check.`, { notify: false });
+          return;
+        }
+        const handed = await this.handOff(`${info.name} needs you: ${outcome.reason}`);
+        if (handed !== "done") {
+          await this.end("FAILED", `I couldn't get into your ${info.name} account, so that didn't go through.`, { notify: handed === "timeout" });
+          return;
+        }
+        await browser.run("navigate", { url: this.task.startUrl ?? info.chatUrl });
+        outcome = await turn();
+      }
+
+      const link = browser.url().startsWith("http") ? browser.url() : null;
+      await this.update({ url: link });
+
+      if (outcome.kind === "answer") {
+        await this.end("SUCCEEDED", outcome.text, { model: provider });
+        return;
+      }
+      if (outcome.kind === "started") {
+        const more = this.task.round < CHECK_DELAYS_MIN.length;
+        if (!checking) {
+          await this.text(`${outcome.note}${link ? `\n\n${link}` : ""}${more ? `\n\nI'll text you when it's done.` : ""}`, "reply", provider);
+        }
+        await this.end("SUCCEEDED", outcome.note, { notify: false });
+        if (more) await scheduleChatCheck({ ...this.task, url: link }, CHECK_DELAYS_MIN[this.task.round]! * 60_000);
+        else if (checking) await this.text(`${info.name} is still working on "${this.task.goal.slice(0, 60)}". Have a look when you get a chance.${link ? `\n\n${link}` : ""}`, "reply", provider);
+        return;
+      }
+      const problem = outcome.kind === "problem" ? outcome.message : `${info.name} asked to sign in again.`;
+      await this.end("FAILED", checking ? problem : `${info.name}: ${problem}`, { notify: !checking, error: "chat" });
+    } catch (err) {
+      const problem = apiKey ? keyProblem(err) : null;
+      if (!problem) throw err;
+      if (problem === "rejected") await markModelKeyInvalid(this.user.id, "claude");
+      await this.end("FAILED", keyProblemMessage("claude", problem), { error: `key_${problem}` });
+    }
   }
 
   /**

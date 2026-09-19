@@ -82,11 +82,12 @@ export async function cancelReminderJob(jobId: string): Promise<void> {
   await getQueue(QUEUE.reminders).remove(jobId);
 }
 
-export async function enqueueComputerTask(taskId: string): Promise<void> {
+export async function enqueueComputerTask(taskId: string, delayMs = 0): Promise<void> {
   await getQueue(QUEUE.computer).add("task", { taskId } satisfies ComputerJob, {
     ...RETAIN,
     jobId: `computer-${taskId}`,
     attempts: 1,
+    ...(delayMs ? { delay: delayMs } : {}),
   });
 }
 

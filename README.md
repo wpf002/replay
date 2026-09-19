@@ -64,9 +64,20 @@ Relay does things on websites in its own browser: books flights and tables, orde
 - **Network.** The browser refuses localhost, private ranges, and metadata addresses. In production, also block private networks at the container's network layer, since a public name can resolve to a private address.
 - **Limits.** 2 tasks at a time, 25 a day, 80 model requests and 25 active minutes per task, 30 minutes to answer or approve.
 
-### AI accounts (bring your own key)
+### AI accounts
 
-People connect their own Claude, ChatGPT, and Perplexity accounts in the app: onboarding starts with "Choose your AI", then opens the provider's key page in an in-app browser and takes the pasted key. The web `/account` page has the same flow. Subscription logins can't be used: Anthropic doesn't allow Claude Pro or Max in other apps, and ChatGPT Plus doesn't include API access.
+Onboarding starts with "Choose your AI", then offers two ways to connect it.
+
+**Sign in (default).** Relay opens ChatGPT, Claude, or Perplexity in its own browser and the person signs in there, in the live view. After that, a text to Relay is typed into that app: the chat lands in their own history and their own plan answers it.
+
+- Short question → Relay waits for the reply and texts it back.
+- Long job ("build me X") → Relay texts the link and a line about what it started, then checks back at 2, 5, 10, 20, 30, and 60 minutes and texts again when it's done.
+- "Save it in my ideas folder" → Relay opens that project in the app and starts the chat inside it.
+- A sign-in wall, a code, or a bot check pauses the task and hands the browser to the person.
+
+**API key.** The person pastes a key; requests go to the provider's API and bill their API account. Nothing lands in their chat history. Relay checks the key, then stores it AES-256-GCM encrypted.
+
+A signed-in account answers by itself, without Relay's tools, so texts routed to it (its prefix, or everything when it's the default) don't set reminders or read email. Keep Claude on an API key for that.
 
 - The API checks each key with the provider, then sends one tiny request on the model Relay will use, which catches accounts with no credit. Keys are stored AES-256-GCM encrypted and only sent to the provider's official API.
 - A person's own key always wins. Otherwise Relay's key answers, up to `DAILY_SPEND_CAP_CENTS`. Usage on their key doesn't count toward the cap.
@@ -147,7 +158,7 @@ packages/config     shared tsconfig
 - **Approvals.** `gmail_send`, calendar invites to other people, and `place_call` never run directly. They become `Action` rows the user approves by texting YES (plus PIN for high-risk ones) or in the app. The text shown is built from the validated input, never from model prose. Once Relay reads email, calendar, or web content in a turn, every write after it needs approval too.
 - **Calls.** ConversationRelay does speech-to-text and text-to-speech; `/voice/ws` streams the same agent on the fast model. Caller ID alone isn't trusted: without STIR/SHAKEN A attestation or a PIN typed on the keypad, the call gets no email, calendar, or memory access, and anything sensitive goes out by text.
 - **Calls for you.** `place_call` dials a business from the Relay number, says it's an automated assistant and that the call is transcribed, stays inside the approved brief, and texts the result.
-- **Keys.** Each request uses the person's own key for that provider when they've connected one, otherwise Relay's (see AI accounts above).
+- **Whose account answers.** A provider they signed in to answers from their own account in Relay's browser. Otherwise their API key, then Relay's key within the daily cap (see AI accounts above).
 - **Limits.** 30 texts per 10 minutes, 12 calls an hour, 5 outbound calls a day, and `DAILY_SPEND_CAP_CENTS` of spend on Relay's keys per day.
 
 ## Testing

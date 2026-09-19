@@ -1,6 +1,6 @@
-import { closeQueues, closeRedis, userModelKeys } from "@relay/core";
+import { closeQueues, closeRedis, connectBrowserAccount, getQueue, QUEUE, userModelKeys } from "@relay/core";
 import { getPrisma, type User } from "@relay/db";
-import type { MeDTO } from "@relay/types";
+import type { ComputerTaskDTO, MeDTO } from "@relay/types";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../../app.js";
@@ -29,6 +29,7 @@ describe.skipIf(!hasDb)("/v1/ai-accounts", () => {
   });
   afterAll(async () => {
     await app.close();
+    await getQueue(QUEUE.computer).obliterate({ force: true });
     await closeQueues();
     await closeRedis();
     await getPrisma().$disconnect();
@@ -81,6 +82,32 @@ describe.skipIf(!hasDb)("/v1/ai-accounts", () => {
     for (let i = 0; i < 10; i++) expect((await send(user, "PUT", "claude", CLAUDE_KEY)).statusCode).toBe(400);
     expect((await send(user, "PUT", "claude", CLAUDE_KEY)).statusCode).toBe(429);
     expect(verifyKey).toHaveBeenCalledTimes(10);
+  });
+
+  it("connects an account by opening the provider's own app to sign in", async () => {
+    const user = await makeUser();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/ai-accounts/gpt/signin",
+      headers: { authorization: `Bearer ${await signSession(user)}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<ComputerTaskDTO>()).toMatchObject({ mode: "signin", goal: "Sign in to ChatGPT" });
+    expect(await getPrisma().computerTask.findFirstOrThrow({})).toMatchObject({
+      provider: "GPT",
+      startUrl: "https://chatgpt.com/auth/login",
+    });
+    // Connecting happens when they finish signing in, not when the page opens.
+    expect(await getPrisma().modelKey.count()).toBe(0);
+  });
+
+  it("keeps signed-in accounts out of the API-key path", async () => {
+    const user = await makeUser();
+    await connectBrowserAccount(user.id, "claude");
+    expect(await userModelKeys(user.id)).toEqual({});
+    const me = await app.inject({ method: "GET", url: "/v1/me", headers: { authorization: `Bearer ${await signSession(user)}` } });
+    expect(me.json<MeDTO>().aiAccounts.find((a) => a.provider === "claude")).toMatchObject({ connected: true, mode: "browser", hint: null });
   });
 
   it("disconnects", async () => {

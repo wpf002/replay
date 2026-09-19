@@ -1,6 +1,6 @@
-import { AI_PROVIDERS, MODELS, type MeDTO, type ModelId } from "@relay/types";
-import { router } from "expo-router";
-import { useState, type ReactNode } from "react";
+import { AI_PROVIDERS, MODELS, type ComputerTaskDTO, type MeDTO, type ModelId } from "@relay/types";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState, type ReactNode } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { useAiConnect } from "../src/lib/ai-connect";
 import { api, ApiError } from "../src/lib/api";
@@ -73,6 +73,26 @@ export default function Setup() {
   });
   const number = relayNumber(me.relayNumber);
   const next = () => setStep(ORDER[Math.min(ORDER.indexOf(step) + 1, ORDER.length - 1)]!);
+  const [useKey, setUseKey] = useState(false);
+
+  // Coming back from signing in to an AI account: pick up that it's connected now.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
+  async function signIntoAi() {
+    setBusy(true);
+    try {
+      const task = await api<ComputerTaskDTO>(`/v1/ai-accounts/${brain}/signin`, { body: {} });
+      router.push(`/task/${task.id}`);
+    } catch (err) {
+      Alert.alert("Couldn't open it", err instanceof ApiError ? err.message : "Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
   const brainAccess = modelAccess(me, brain);
   const brainInfo = AI_PROVIDERS[brain];
 
@@ -139,7 +159,7 @@ export default function Setup() {
     key:
       justConnected || brainAccess === "connected" ? (
         <Button label="Continue" block onPress={() => void afterKey()} />
-      ) : (
+      ) : useKey ? (
         <Stack gap={2}>
           <Button
             label={`Connect ${AI_PROVIDERS[conn.provider].name}`}
@@ -148,8 +168,14 @@ export default function Setup() {
             disabled={!conn.key || Boolean(conn.otherProvider)}
             onPress={() => void conn.connect()}
           />
+          <Button label="Back" kind="ghost" block onPress={() => setUseKey(false)} />
+        </Stack>
+      ) : (
+        <Stack gap={2}>
+          <Button label={`Sign in to ${brainInfo.name}`} icon="log-in" block loading={busy} onPress={() => void signIntoAi()} />
+          <Button label="Use an API key instead" kind="ghost" block onPress={() => setUseKey(true)} />
           <Button
-            label={conn.provider === brain && brainAccess === "included" ? `Use Relay's included ${brainInfo.name}` : "Skip for now"}
+            label={brainAccess === "included" ? `Use Relay's included ${brainInfo.name}` : "Skip for now"}
             kind="ghost"
             block
             onPress={next}
@@ -253,11 +279,23 @@ export default function Setup() {
           ) : (
             <>
               <Hero
-                icon="key"
+                icon={useKey ? "key" : "log-in"}
                 title={`Connect ${AI_PROVIDERS[conn.provider].name}`}
-                body={`Relay uses your own ${AI_PROVIDERS[conn.provider].company} API key. It takes about a minute.`}
+                body={
+                  useKey
+                    ? `Relay sends requests straight to the ${AI_PROVIDERS[conn.provider].company} API with your key. Nothing lands in your ${AI_PROVIDERS[conn.provider].name} history.`
+                    : `Sign in once, and your texts become chats in your own ${brainInfo.name} history, answered on your ${brainInfo.planName} plan.`
+                }
               />
-              <AiConnectForm conn={conn} />
+              {useKey ? (
+                <AiConnectForm conn={conn} />
+              ) : (
+                <Stack gap={4}>
+                  <Point icon="message-square">Text Relay and it shows up in {brainInfo.name} like you typed it there.</Point>
+                  <Point icon="credit-card">Answers come off your {brainInfo.planName} plan, not a separate API bill.</Point>
+                  <Point icon="lock">You sign in yourself on the next screen. Relay never sees your password.</Point>
+                </Stack>
+              )}
             </>
           )}
         </Stack>

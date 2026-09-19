@@ -89,7 +89,7 @@ export const CUSTOM_TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-const BROWSER_TOOLSET: Anthropic.BrowserToolset20260801 = {
+export const BROWSER_TOOLSET: Anthropic.BrowserToolset20260801 = {
   type: "browser_toolset_20260801",
   configs: {
     zoom: { enabled: false },
@@ -141,7 +141,7 @@ export function pruneScreenshots(messages: Anthropic.MessageParam[]): void {
 }
 
 /** Moves the cache breakpoint to the end of the newest message so each request reuses the last. */
-function markCache(messages: Anthropic.MessageParam[]): void {
+export function markCache(messages: Anthropic.MessageParam[]): void {
   for (const m of messages) {
     if (typeof m.content === "string") continue;
     for (const block of m.content) if ("cache_control" in block) delete (block as { cache_control?: unknown }).cache_control;

@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "ModelKey" ADD COLUMN     "mode" TEXT NOT NULL DEFAULT 'key',
+ALTER COLUMN "keyEnc" DROP NOT NULL,
+ALTER COLUMN "hint" DROP NOT NULL;

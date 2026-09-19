@@ -69,13 +69,16 @@ function ConnectForm({ provider, onDone }: { provider: ModelId; onDone: () => vo
           </p>
         ) : null}
       </div>
-      <p className={styles.meta}>{info.billingNote}</p>
+      <p className={styles.meta}>{info.billingNote} To use your {info.planName} plan instead, sign in to {info.name} from the Relay app.</p>
     </form>
   );
 }
 
 function status(account: AiAccountDTO, included: boolean): string {
-  if (account.connected) return account.invalid ? "Key stopped working" : `Your key ${account.hint ?? ""}`;
+  if (account.connected) {
+    if (account.invalid) return "Key stopped working";
+    return account.mode === "browser" ? "Signed in to your account" : `Your key ${account.hint ?? ""}`;
+  }
   return included ? "Included up to a daily limit" : "Not connected";
 }
 
@@ -88,7 +91,7 @@ export function AiAccounts({ accounts, included }: { accounts: AiAccountDTO[]; i
     <ul className={styles.list}>
       {MODELS.map((m) => {
         const info = AI_PROVIDERS[m];
-        const account = accounts.find((a) => a.provider === m) ?? { provider: m, connected: false, hint: null, invalid: false, connectedAt: null };
+        const account: AiAccountDTO = accounts.find((a) => a.provider === m) ?? { provider: m, connected: false, mode: "key", hint: null, invalid: false, connectedAt: null };
         const working = account.connected && !account.invalid;
         return (
           <li key={m} className={styles.aiRow}>
