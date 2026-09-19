@@ -167,6 +167,9 @@ importers:
       '@relay/agent':
         specifier: workspace:*
         version: link:../../packages/agent
+      '@relay/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@relay/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -201,6 +204,12 @@ importers:
 
   packages/agent:
     dependencies:
+      '@relay/core':
+        specifier: workspace:*
+        version: link:../core
+      '@relay/db':
+        specifier: workspace:*
+        version: link:../db
       '@relay/providers':
         specifier: workspace:*
         version: link:../providers
@@ -225,12 +234,21 @@ importers:
       '@relay/types':
         specifier: workspace:*
         version: link:../types
+      bullmq:
+        specifier: 6.3.8
+        version: 6.3.8(ioredis@6.0.0)(pg@8.23.0)
       ioredis:
         specifier: 6.0.0
         version: 6.0.0
+      libphonenumber-js:
+        specifier: 1.13.13
+        version: 1.13.13
       pino:
         specifier: 10.3.1
         version: 10.3.1
+      twilio:
+        specifier: 6.1.1
+        version: 6.1.1
       zod:
         specifier: 4.6.5
         version: 4.6.5

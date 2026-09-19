@@ -1,15 +1,15 @@
 import type { ModelId } from "@relay/types";
+import { claude } from "./claude.js";
+import { openai } from "./openai.js";
+import { perplexity } from "./perplexity.js";
+import type { ModelProvider } from "./types.js";
 
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
+export * from "./pricing.js";
+export * from "./types.js";
+export { claude, openai, perplexity };
+
+const PROVIDERS: Record<ModelId, ModelProvider> = { claude, gpt: openai, perplexity };
+
+export function getProvider(id: ModelId): ModelProvider {
+  return PROVIDERS[id];
 }
-
-/** Every model sits behind this. Adding a provider = one new file implementing it. */
-export interface ModelProvider {
-  id: ModelId;
-  complete(system: string, messages: ChatMessage[]): Promise<string>;
-}
-
-// TODO: claude.ts (@anthropic-ai/sdk), openai.ts (openai), perplexity.ts
-// (OpenAI-compatible client pointed at https://api.perplexity.ai).

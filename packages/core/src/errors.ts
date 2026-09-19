@@ -1,12 +1,4 @@
-/** A required env var is missing. HTTP layers map this to 501 with the TODO in the message. */
-export class NotConfiguredError extends Error {
-  readonly variable: string;
-  constructor(variable: string) {
-    super(`TODO: set ${variable} to enable this`);
-    this.name = "NotConfiguredError";
-    this.variable = variable;
-  }
-}
+export { NotConfiguredError } from "@relay/types";
 
 /** A user-facing failure whose message is safe to show as-is. */
 export class UserError extends Error {

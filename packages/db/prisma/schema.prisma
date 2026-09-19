@@ -123,6 +123,9 @@ model Message {
   twilioSid      String?      @unique
   // Citations, tool names, delivery errors.
   metadata       Json?
+  // Inbound only: set once Relay has answered it, or when it was a keyword/confirmation handled
+  // without the agent. Unhandled inbound messages are what the next agent turn reads.
+  handledAt      DateTime?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NotConfiguredError } from "./errors.js";
+import { NotConfiguredError } from "@relay/types";
 
 // Blank lines in .env (`FOO=`) arrive as "". Treat them as unset.
 const optional = z.preprocess((v) => (v === "" ? undefined : v), z.string().optional());
@@ -16,6 +16,7 @@ const schema = z.object({
   ),
   TOKEN_ENCRYPTION_KEY: optional,
   JWT_SECRET: optional,
+  SUPPORT_EMAIL: optional,
 
   TWILIO_ACCOUNT_SID: optional,
   TWILIO_AUTH_TOKEN: optional,

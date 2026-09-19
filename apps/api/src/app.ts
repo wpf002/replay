@@ -5,6 +5,7 @@ import { env, logOptions, NotConfiguredError, UserError } from "@relay/core";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { healthRoutes } from "./routes/health.js";
+import { twilioSmsRoutes } from "./routes/twilio-sms.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -35,6 +36,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(healthRoutes);
+  await app.register(twilioSmsRoutes);
   await app.register(waitlistRoutes, { prefix: "/v1" });
 
   return app;

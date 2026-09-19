@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "${configDir}/dist", "rootDir": "${configDir}/src", "types": ["node"] },
-  "include": ["${configDir}/src"]
+  "include": ["${configDir}/src"],
+  "exclude": ["${configDir}/src/**/*.test.ts", "${configDir}/src/test/**"]
 }

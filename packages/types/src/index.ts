@@ -30,3 +30,13 @@ export const SMS_CONSENT_TEXT =
   "I agree to receive conversational and account text messages from Relay at this number, " +
   "including replies to my messages, reminders I set, and confirmation requests. " +
   "Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.";
+
+/** A required env var is missing. HTTP layers map this to 501 with the TODO in the message. */
+export class NotConfiguredError extends Error {
+  readonly variable: string;
+  constructor(variable: string) {
+    super(`TODO: set ${variable} to enable this`);
+    this.name = "NotConfiguredError";
+    this.variable = variable;
+  }
+}
