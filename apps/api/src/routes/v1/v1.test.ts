@@ -188,6 +188,30 @@ describe.skipIf(!hasDb)("/v1", () => {
     });
   });
 
+  describe("billing", () => {
+    it("is an honest 501 until billing is built", async () => {
+      const user = await makeUser();
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/billing",
+        headers: { authorization: `Bearer ${await signSession(user)}` },
+      });
+      expect(res.statusCode).toBe(501);
+      expect(res.json().error).toMatch(/^TODO/);
+    });
+  });
+
+  describe("spend cap", () => {
+    it("reports today's spend against the cap", async () => {
+      const user = await makeUser();
+      await getPrisma().usage.create({
+        data: { userId: user.id, model: "CLAUDE", providerModel: "claude-opus-5", inputTokens: 1000, outputTokens: 200, costMicros: 125_000 },
+      });
+      const me = await app.inject({ method: "GET", url: "/v1/me", headers: { authorization: `Bearer ${await signSession(user)}` } });
+      expect(me.json<MeDTO>().usage).toEqual({ spentCents: 12.5, capCents: 300 });
+    });
+  });
+
   describe("oauth", () => {
     it("rejects a callback without a valid state", async () => {
       const res = await app.inject({ method: "GET", url: "/oauth/google/callback?code=abc&state=forged" });

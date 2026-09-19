@@ -11,6 +11,7 @@ import { twilioSmsRoutes } from "./routes/twilio-sms.js";
 import { twilioVoiceRoutes } from "./routes/twilio-voice.js";
 import { actionRoutes } from "./routes/v1/actions.js";
 import { authRoutes } from "./routes/v1/auth.js";
+import { billingRoutes } from "./routes/v1/billing.js";
 import { connectionRoutes } from "./routes/v1/connections.js";
 import { historyRoutes } from "./routes/v1/history.js";
 import { meRoutes } from "./routes/v1/me.js";
@@ -58,6 +59,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await v1.register(connectionRoutes);
       await v1.register(actionRoutes);
       await v1.register(historyRoutes);
+      await v1.register(billingRoutes);
     },
     { prefix: "/v1" },
   );
