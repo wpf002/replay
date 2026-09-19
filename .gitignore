@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.turbo/
+.expo/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+packages/db/src/generated/
+coverage/
+.DS_Store
+ios/
+android/

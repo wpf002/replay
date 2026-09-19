@@ -1,0 +1,26 @@
+{
+  "name": "@relay/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@relay/agent": "workspace:*",
+    "@relay/db": "workspace:*",
+    "@relay/providers": "workspace:*",
+    "@relay/types": "workspace:*",
+    "bullmq": "6.3.8",
+    "googleapis": "181.0.0",
+    "ioredis": "6.0.0",
+    "pino": "10.3.1",
+    "twilio": "6.1.1"
+  },
+  "devDependencies": { "@relay/config": "workspace:*", "tsx": "4.23.13" }
+}
