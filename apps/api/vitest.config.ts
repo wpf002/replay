@@ -17,6 +17,10 @@ export default defineConfig({
       DEV_LOGIN_CODE: "424242",
       INVITE_ONLY: "true",
       TWILIO_PHONE_NUMBER: "+15555550100",
+      // Claude is included on Relay's key; ChatGPT and Perplexity need the person's own.
+      ANTHROPIC_API_KEY: "test-anthropic-key",
+      OPENAI_API_KEY: "",
+      PERPLEXITY_API_KEY: "",
     },
     fileParallelism: false,
   },

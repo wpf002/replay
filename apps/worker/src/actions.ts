@@ -1,7 +1,9 @@
 import { findTool, type ToolContext } from "@relay/agent";
 import {
   GoogleNotConnectedError,
+  loadKeyRing,
   log,
+  markModelKeyInvalid,
   recordUsage,
   textUser,
   UserError,
@@ -59,6 +61,7 @@ export async function processAction(job: Job<ActionJob>): Promise<void> {
     where: { userId_provider: { userId: user.id, provider: "GOOGLE" } },
     select: { id: true },
   });
+  const ring = await loadKeyRing(user.id, user.timezone);
   const ctx: ToolContext = {
     userId: user.id,
     userName: user.name,
@@ -70,7 +73,11 @@ export async function processAction(job: Job<ActionJob>): Promise<void> {
     now: new Date(),
     hasGoogle: Boolean(google),
     onUsage: (provider, usage, model) =>
-      recordUsage({ userId: user.id, provider, model, channel: action.channel, ...usage }),
+      recordUsage({ userId: user.id, provider, model, channel: action.channel, byok: ring.byok(provider), ...usage }),
+    keyFor: ring.keyFor,
+    onKeyProblem: async (err) => {
+      if (err.problem === "rejected") await markModelKeyInvalid(user.id, err.provider);
+    },
   };
 
   try {

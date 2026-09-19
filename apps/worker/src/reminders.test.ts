@@ -26,6 +26,7 @@ describe.skipIf(!hasDb)("reminders", () => {
       now: new Date(),
       hasGoogle: false,
       onUsage: async () => {},
+      keyFor: () => ({}),
     };
   });
 

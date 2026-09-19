@@ -47,6 +47,10 @@ const schema = z.object({
   INVITE_ONLY: z
     .preprocess((v) => (v === "" || v === undefined ? "true" : v), z.enum(["true", "false"]))
     .transform((v) => v === "true"),
+  // true: Relay never uses its own model keys for people; everyone connects their own.
+  REQUIRE_USER_MODEL_KEYS: z
+    .preprocess((v) => (v === "" || v === undefined ? "false" : v), z.enum(["true", "false"]))
+    .transform((v) => v === "true"),
   DEV_LOGIN_CODE: optional,
   VOICE_TTS_PROVIDER: optional,
   VOICE_NAME: optional,

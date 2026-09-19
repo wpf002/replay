@@ -1,5 +1,5 @@
 import type { Citation, Usage } from "@relay/providers";
-import type { ModelId } from "@relay/types";
+import type { ModelId, ProviderKeyError } from "@relay/types";
 import type { z } from "zod";
 
 export type ToolKind =
@@ -27,6 +27,13 @@ export interface ToolContext {
   hasGoogle: boolean;
   /** Called for every model request a tool makes, so spend caps see it. */
   onUsage: (provider: ModelId, usage: Usage, model: string) => Promise<void>;
+  /**
+   * Whose key pays for a model request a tool makes: the person's own ({ apiKey }), Relay's ({}),
+   * or null when neither may be used.
+   */
+  keyFor: (provider: ModelId) => { apiKey?: string } | null;
+  /** A request on the person's own key failed because of the key or its account. */
+  onKeyProblem?: (err: ProviderKeyError) => Promise<void>;
 }
 
 export interface ToolOutput {

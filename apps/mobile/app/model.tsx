@@ -2,7 +2,7 @@ import { MODELS, type MeDTO, type ModelId } from "@relay/types";
 import { router } from "expo-router";
 import { useState } from "react";
 import { api, ApiError } from "../src/lib/api";
-import { MODEL_INFO } from "../src/lib/models";
+import { ACCESS_LABEL, canUse, MODEL_INFO, modelAccess } from "../src/lib/models";
 import { useMe, useSession } from "../src/lib/session";
 import { Button, Card, OptionCard, Screen, Stack, Text } from "../src/ui";
 import { PageHeader } from "../src/ui/nav";
@@ -18,8 +18,10 @@ export default function ModelScreen() {
     setSaving(true);
     setError(null);
     try {
-      setMe(await api<MeDTO>("/v1/me", { method: "PATCH", body: { defaultModel: choice } }));
-      router.back();
+      const me = await api<MeDTO>("/v1/me", { method: "PATCH", body: { defaultModel: choice } });
+      setMe(me);
+      if (canUse(me, choice)) router.back();
+      else router.replace(`/ai/${choice}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't save.");
     } finally {
@@ -29,7 +31,15 @@ export default function ModelScreen() {
 
   return (
     <Screen
-      footer={<Button label="Save" block disabled={choice === me.defaultModel} loading={saving} onPress={save} />}
+      footer={
+        <Button
+          label={canUse(me, choice) ? "Save" : `Save and connect ${MODEL_INFO[choice].name}`}
+          block
+          disabled={choice === me.defaultModel}
+          loading={saving}
+          onPress={save}
+        />
+      }
     >
       <PageHeader back title="Default model" body="Answers every text without a prefix. Calls use its faster sibling." />
       <Stack gap={3}>
@@ -40,7 +50,7 @@ export default function ModelScreen() {
             onPress={() => setChoice(m)}
             title={`${MODEL_INFO[m].name} · ${MODEL_INFO[m].by}`}
             badge={MODEL_INFO[m].prefix}
-            subtitle={MODEL_INFO[m].blurb}
+            subtitle={`${ACCESS_LABEL[modelAccess(me, m)]}. ${MODEL_INFO[m].blurb}`}
           />
         ))}
       </Stack>

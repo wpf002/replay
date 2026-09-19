@@ -23,6 +23,7 @@ describe.skipIf(!hasDb)("memory tools", () => {
       now: new Date(),
       hasGoogle: false,
       onUsage: async () => {},
+      keyFor: () => ({}),
     };
   });
 

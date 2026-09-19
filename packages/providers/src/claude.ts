@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { optional, required } from "./env.js";
+import { OFFICIAL_BASE_URL, rethrowKeyError } from "./keys.js";
 import { costMicros, parsePrice } from "./pricing.js";
 import type {
   AgentMessage,
@@ -20,7 +21,9 @@ const supportsFallbacks = (model: string) => /^claude-(opus-5|fable-5)/.test(mod
 const supportsEffort = (model: string) => !model.includes("haiku");
 
 let client: Anthropic | undefined;
-function getClient(): Anthropic {
+/** A person's own key gets its own client pointed at Anthropic; otherwise Relay's key. */
+function clientFor(apiKey?: string): Anthropic {
+  if (apiKey) return new Anthropic({ apiKey, baseURL: OFFICIAL_BASE_URL.claude });
   client ??= new Anthropic({ apiKey: required("ANTHROPIC_API_KEY") });
   return client;
 }
@@ -107,14 +110,19 @@ export const claude: ModelProvider = {
     };
 
     const options = req.signal ? { signal: req.signal } : {};
+    const api = clientFor(req.apiKey);
     let message: Anthropic.Beta.BetaMessage;
-    if (req.onText) {
-      const stream = getClient().beta.messages.stream(params, options);
-      const onText = req.onText;
-      stream.on("text", (delta) => onText(delta));
-      message = await stream.finalMessage();
-    } else {
-      message = await getClient().beta.messages.create(params, options);
+    try {
+      if (req.onText) {
+        const stream = api.beta.messages.stream(params, options);
+        const onText = req.onText;
+        stream.on("text", (delta) => onText(delta));
+        message = await stream.finalMessage();
+      } else {
+        message = await api.beta.messages.create(params, options);
+      }
+    } catch (err) {
+      rethrowKeyError("claude", req.apiKey, err);
     }
 
     const stopReason = mapStop(message.stop_reason);

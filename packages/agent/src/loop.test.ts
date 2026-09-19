@@ -4,6 +4,7 @@ import type {
   ModelProvider,
   ToolCall,
 } from "@relay/providers";
+import { ProviderKeyError } from "@relay/types";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { runAgent, type ApprovalRequest } from "./loop.js";
@@ -46,6 +47,7 @@ const ctx: ToolContext = {
   now: new Date("2026-09-19T18:00:00Z"),
   hasGoogle: true,
   onUsage: async () => {},
+  keyFor: () => ({}),
 };
 
 const lookup = defineTool({
@@ -284,5 +286,54 @@ describe("runAgent", () => {
     });
     expect(onUsage).toHaveBeenCalledTimes(2);
     expect(onUsage).toHaveBeenCalledWith("claude", usage, "test-model");
+  });
+
+  it("sends the person's own key with every model request", async () => {
+    const { provider, requests } = scripted(
+      reply("", [{ id: "t1", name: "lookup", input: { q: "a" } }]),
+      reply("done"),
+    );
+    await runAgent({
+      provider,
+      apiKey: "sk-ant-own",
+      system: { stable: "s" },
+      history: [],
+      input: "x",
+      tools: [lookup],
+      ctx,
+      requestApproval: gate().fn,
+    });
+    expect(requests.map((r) => r.apiKey)).toEqual(["sk-ant-own", "sk-ant-own"]);
+  });
+
+  it("reports a tool's key problem and tells the model how to explain it", async () => {
+    const search = defineTool({
+      name: "web_search",
+      description: "search",
+      input: z.object({ query: z.string() }),
+      kind: "read",
+      describe: () => "search",
+      run: async () => {
+        throw new ProviderKeyError("perplexity", "no_credit");
+      },
+    });
+    const onKeyProblem = vi.fn(async () => {});
+    const { provider, requests } = scripted(
+      reply("", [{ id: "t1", name: "web_search", input: { query: "hours" } }]),
+      reply("Your Perplexity account is out of credit."),
+    );
+    await runAgent({
+      provider,
+      system: { stable: "s" },
+      history: [],
+      input: "x",
+      tools: [search],
+      ctx: { ...ctx, onKeyProblem },
+      requestApproval: gate().fn,
+    });
+    expect(onKeyProblem).toHaveBeenCalledWith(expect.objectContaining({ provider: "perplexity", problem: "no_credit" }));
+    const results = requests[1]!.messages.at(-1);
+    expect(results).toMatchObject({ role: "tool", results: [{ isError: true }] });
+    expect(JSON.stringify(results)).toContain("out of credit");
   });
 });

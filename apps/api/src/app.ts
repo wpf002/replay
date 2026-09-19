@@ -10,6 +10,7 @@ import { oauthGoogleRoutes } from "./routes/oauth-google.js";
 import { twilioSmsRoutes } from "./routes/twilio-sms.js";
 import { twilioVoiceRoutes } from "./routes/twilio-voice.js";
 import { actionRoutes } from "./routes/v1/actions.js";
+import { aiAccountRoutes } from "./routes/v1/ai-accounts.js";
 import { authRoutes } from "./routes/v1/auth.js";
 import { billingRoutes } from "./routes/v1/billing.js";
 import { connectionRoutes } from "./routes/v1/connections.js";
@@ -31,7 +32,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       return reply.code(501).send({ error: err.message });
     }
     if (err instanceof UserError) {
-      return reply.code(err.status).send({ error: err.message });
+      return reply.code(err.status).send({ error: err.message, ...(err.reason ? { reason: err.reason } : {}) });
     }
     if (err instanceof ZodError) {
       const first = err.issues[0];
@@ -57,6 +58,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await v1.register(authRoutes);
       await v1.register(meRoutes);
       await v1.register(connectionRoutes);
+      await v1.register(aiAccountRoutes);
       await v1.register(actionRoutes);
       await v1.register(historyRoutes);
       await v1.register(billingRoutes);

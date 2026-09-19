@@ -1,4 +1,4 @@
-import { dailySpend, env, fromDbModel, GOOGLE_SCOPES, isRecurrence } from "@relay/core";
+import { aiAccounts, dailySpend, env, fromDbModel, GOOGLE_SCOPES, includedModels, isRecurrence } from "@relay/core";
 import { getPrisma, type Action, type Conversation, type Memory, type Message, type Reminder, type User } from "@relay/db";
 import type {
   ActionDTO,
@@ -70,7 +70,7 @@ export function toReminderDTO(r: Reminder): ReminderDTO {
 export async function toMeDTO(user: User): Promise<MeDTO> {
   const prisma = getPrisma();
   const now = new Date();
-  const [google, spend, pendingActions, memories, upcomingReminders] = await Promise.all([
+  const [google, spend, pendingActions, memories, upcomingReminders, accounts] = await Promise.all([
     prisma.connection.findUnique({
       where: { userId_provider: { userId: user.id, provider: "GOOGLE" } },
       select: { accountEmail: true, scopes: true },
@@ -83,6 +83,7 @@ export async function toMeDTO(user: User): Promise<MeDTO> {
     prisma.reminder.count({
       where: { userId: user.id, OR: [{ sentAt: null }, { recurrence: { not: null } }] },
     }),
+    aiAccounts(user.id),
   ]);
   return {
     id: user.id,
@@ -99,6 +100,8 @@ export async function toMeDTO(user: User): Promise<MeDTO> {
       email: google?.accountEmail ?? null,
       missingScopes: google ? Object.values(GOOGLE_SCOPES).some((s) => !google.scopes.includes(s)) : false,
     },
+    aiAccounts: accounts,
+    includedModels: includedModels(),
     usage: { spentCents: Math.round(spend.spentCents * 100) / 100, capCents: spend.capCents },
     counts: { pendingActions, memories, upcomingReminders },
     createdAt: user.createdAt.toISOString(),

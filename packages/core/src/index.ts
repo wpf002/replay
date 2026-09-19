@@ -7,6 +7,7 @@ export * from "./google.js";
 export * from "./invites.js";
 export * from "./lock.js";
 export * from "./log.js";
+export * from "./model-keys.js";
 export * from "./models.js";
 export * from "./phone.js";
 export * from "./pin.js";

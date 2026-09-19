@@ -1,6 +1,6 @@
 import { pino, type LoggerOptions } from "pino";
 
-/** Paths that must never reach logs: OAuth tokens, PINs, auth headers, verification codes. */
+/** Paths that must never reach logs: OAuth tokens, model API keys, PINs, auth headers, verification codes. */
 export const REDACT_PATHS = [
   "*.accessToken",
   "*.refreshToken",
@@ -12,6 +12,8 @@ export const REDACT_PATHS = [
   "*.pin",
   "*.pinHash",
   "*.code",
+  "*.apiKey",
+  "*.keyEnc",
   "req.headers.authorization",
   "req.headers.cookie",
   'req.headers["x-twilio-signature"]',

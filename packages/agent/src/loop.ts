@@ -8,7 +8,8 @@ import type {
   ToolResult,
   ToolSpec,
 } from "@relay/providers";
-import { NotConfiguredError } from "@relay/types";
+import { keyProblemMessage } from "@relay/core";
+import { NotConfiguredError, ProviderKeyError } from "@relay/types";
 import { z } from "zod";
 import type { AnyTool, Risk, ToolContext } from "./tools/types.js";
 
@@ -30,6 +31,8 @@ export interface PendingApproval {
 
 export interface RunAgentOptions {
   provider: ModelProvider;
+  /** The person's own key for `provider`. Omitted: Relay's key. */
+  apiKey?: string;
   tier?: ModelTier;
   system: SystemPrompt;
   history: AgentMessage[];
@@ -137,6 +140,14 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentTurn> {
       if (err instanceof NotConfiguredError) {
         return { ...base, content: "This feature isn't set up on the server yet.", isError: true };
       }
+      if (err instanceof ProviderKeyError) {
+        await o.ctx.onKeyProblem?.(err);
+        return {
+          ...base,
+          content: `${tool.name} is unavailable: ${keyProblemMessage(err.provider, err.problem)} Pass that on in one short sentence.`,
+          isError: true,
+        };
+      }
       const message = err instanceof Error ? err.message : String(err);
       return { ...base, content: `The tool failed: ${message}`, isError: true };
     }
@@ -148,6 +159,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentTurn> {
       messages,
       ...(specs ? { tools: specs } : {}),
       ...(o.tier ? { tier: o.tier } : {}),
+      ...(o.apiKey ? { apiKey: o.apiKey } : {}),
       ...(o.maxTokens ? { maxTokens: o.maxTokens } : {}),
       ...(o.onText ? { onText: o.onText } : {}),
       ...(o.signal ? { signal: o.signal } : {}),

@@ -48,6 +48,11 @@ export interface CompletionRequest {
   /** Provided => the response streams and each text delta is passed here. */
   onText?: (delta: string) => void;
   signal?: AbortSignal;
+  /**
+   * The person's own key for this provider. Sent only to the provider's official API; a
+   * rejection throws ProviderKeyError instead of the SDK's auth error.
+   */
+  apiKey?: string;
 }
 
 export interface Citation {

@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { actionMeta, STATE_LABEL } from "../../src/lib/actions";
 import { dollars, formatPhone, greeting, initials } from "../../src/lib/format";
+import { canUse, MODEL_INFO, modelAccess } from "../../src/lib/models";
 import { callRelay, openMessages, relayNumber } from "../../src/lib/relay";
 import { useMe, useSession } from "../../src/lib/session";
 import { useApi } from "../../src/lib/use-api";
@@ -48,6 +49,19 @@ export default function Home() {
   );
 
   const todo = [
+    !canUse(me, me.defaultModel) && {
+      icon: "cpu" as const,
+      title: `Connect ${MODEL_INFO[me.defaultModel].name}`,
+      subtitle: "Relay needs it to answer your texts and calls",
+      onPress: () => router.push(`/ai/${me.defaultModel}`),
+    },
+    modelAccess(me, me.defaultModel) === "invalid" &&
+      canUse(me, me.defaultModel) && {
+        icon: "alert-circle" as const,
+        title: `Update your ${MODEL_INFO[me.defaultModel].name} key`,
+        subtitle: "It stopped working, so Relay is using its included access",
+        onPress: () => router.push(`/ai/${me.defaultModel}`),
+      },
     !me.google.connected && {
       icon: "mail" as const,
       title: "Connect Google",
@@ -67,7 +81,7 @@ export default function Home() {
       subtitle: "Needed on calls before Relay sends or reads anything",
       onPress: () => router.push({ pathname: "/pin", params: { mode: "set" } }),
     },
-  ].filter(Boolean) as { icon: "mail" | "alert-circle" | "key"; title: string; subtitle: string; onPress: () => void }[];
+  ].filter(Boolean) as { icon: "cpu" | "mail" | "alert-circle" | "key"; title: string; subtitle: string; onPress: () => void }[];
 
   return (
     <Screen refreshing={actions.refreshing} onRefresh={reload}>

@@ -1,13 +1,30 @@
 import { env, formatPhone, placeRelayCall, rateLimit, toE164, UserError, zonedParts } from "@relay/core";
 import { getPrisma } from "@relay/db";
+import type { ModelId } from "@relay/types";
 import { z } from "zod";
-import { defineTool } from "./types.js";
+import { defineTool, type ToolContext } from "./types.js";
 
 const CALLS_PER_DAY = 5;
 /** Local hours (in the person's time zone) when Relay will place calls to businesses. */
 const CALL_HOURS = { from: 8, to: 21 };
 
 /** Only US and Canadian business numbers; never premium, the user's own number, or Relay's. */
+/**
+ * The model that talks to a business on a call Relay places: the person's default when it can use
+ * tools, otherwise Claude, then ChatGPT, whichever they have access to.
+ */
+export function callModel(
+  keyFor: ToolContext["keyFor"],
+  preferred?: ModelId,
+): { provider: "claude" | "gpt"; key: { apiKey?: string } } | null {
+  const order = preferred === "gpt" ? (["gpt", "claude"] as const) : (["claude", "gpt"] as const);
+  for (const provider of order) {
+    const key = keyFor(provider);
+    if (key) return { provider, key };
+  }
+  return null;
+}
+
 export function checkCallTarget(phone: string, userPhone: string): string {
   const e164 = toE164(phone);
   if (!e164 || !e164.startsWith("+1")) throw new UserError("Relay can only call US and Canadian numbers.");
@@ -75,6 +92,9 @@ export const placeCall = defineTool({
     if (!limit.allowed) throw new UserError(`Relay places up to ${CALLS_PER_DAY} calls a day.`);
 
     if (!ctx.actionId) throw new Error("place_call only runs as an approved action");
+    if (!callModel(ctx.keyFor)) {
+      throw new UserError("Relay needs Claude or ChatGPT to make calls. Connect one in the Relay app under AI accounts.");
+    }
     const prisma = getPrisma();
     const conversation = await prisma.conversation.create({
       data: { userId: ctx.userId, channel: "VOICE", direction: "OUTBOUND", actionId: ctx.actionId },

@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Set by some endpoints so the app can offer a fix, like "no_credit". */
+    readonly reason?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -38,10 +40,10 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     throw new ApiError("Can't reach Relay. Check your connection and try again.", 0);
   }
 
-  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  const data = (await res.json().catch(() => null)) as { error?: string; reason?: string } | null;
   if (!res.ok) {
     if (res.status === 401 && token) onUnauthorized?.();
-    throw new ApiError(data?.error ?? "Something went wrong. Try again.", res.status);
+    throw new ApiError(data?.error ?? "Something went wrong. Try again.", res.status, data?.reason);
   }
   return data as T;
 }

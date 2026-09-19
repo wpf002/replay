@@ -13,7 +13,9 @@
     "test": "turbo run test --concurrency=1",
     "db:migrate": "pnpm --filter @relay/db db:migrate",
     "db:generate": "pnpm --filter @relay/db db:generate",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "configure": "pnpm --filter @relay/api configure",
+    "tunnel": "pnpm --filter @relay/api tunnel"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

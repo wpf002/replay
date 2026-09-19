@@ -66,6 +66,10 @@ export interface MeDTO {
   google: { connected: boolean; email: string | null; missingScopes: boolean };
   usage: { spentCents: number; capCents: number };
   counts: { pendingActions: number; memories: number; upcomingReminders: number };
+  /** The person's own provider keys. */
+  aiAccounts: AiAccountDTO[];
+  /** Models Relay runs on its own keys for people who haven't connected theirs. */
+  includedModels: ModelId[];
   createdAt: string;
 }
 
@@ -123,3 +127,87 @@ export interface AuthSession {
 
 /** Deep-link scheme registered by apps/mobile (app.json "scheme"). */
 export const APP_SCHEME = "relay";
+
+// ── AI accounts: people can connect their own provider API keys ─────────────
+
+export interface AiProviderInfo {
+  /** What people call it. */
+  name: string;
+  company: string;
+  prefix: string;
+  /** Where a person creates an API key. */
+  keyUrl: string;
+  /** Start of a key, shown as a placeholder. */
+  keyPrefix: string;
+  /** Where a person adds credit to their API account. */
+  billingUrl: string;
+  /** Why a subscription login isn't enough, and who pays. */
+  billingNote: string;
+}
+
+export const AI_PROVIDERS: Record<ModelId, AiProviderInfo> = {
+  claude: {
+    name: "Claude",
+    company: "Anthropic",
+    prefix: "@claude",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+    keyPrefix: "sk-ant-",
+    billingUrl: "https://console.anthropic.com/settings/billing",
+    billingNote:
+      "Anthropic doesn't let other apps use Claude Pro or Max plans, so Relay uses an API key from the Claude Console. Usage bills to that Console account.",
+  },
+  gpt: {
+    name: "ChatGPT",
+    company: "OpenAI",
+    prefix: "@gpt",
+    keyUrl: "https://platform.openai.com/api-keys",
+    keyPrefix: "sk-",
+    billingUrl: "https://platform.openai.com/settings/organization/billing/overview",
+    billingNote:
+      "ChatGPT Plus doesn't include API access, so Relay uses an OpenAI API key. Usage bills to your OpenAI API account.",
+  },
+  perplexity: {
+    name: "Perplexity",
+    company: "Perplexity",
+    prefix: "@web",
+    keyUrl: "https://console.perplexity.ai/project/keys",
+    keyPrefix: "pplx-",
+    billingUrl: "https://console.perplexity.ai",
+    billingNote:
+      "Relay uses an API key from the Perplexity API console. Usage bills to that account.",
+  },
+};
+
+/** Guesses the provider from a key's prefix: sk-ant- (Anthropic), pplx- (Perplexity), sk- (OpenAI). */
+export function detectKeyProvider(key: string): ModelId | null {
+  const k = key.trim();
+  if (k.startsWith("sk-ant-")) return "claude";
+  if (k.startsWith("pplx-")) return "perplexity";
+  if (/^sk-[A-Za-z0-9_-]{16,}$/.test(k)) return "gpt";
+  return null;
+}
+
+export interface AiAccountDTO {
+  provider: ModelId;
+  connected: boolean;
+  /** "…a1b2" when connected. */
+  hint: string | null;
+  /** The provider rejected the key while Relay was using it. */
+  invalid: boolean;
+  connectedAt: string | null;
+}
+
+/** "rejected": the provider refused the key. "no_credit": the key works but the account can't pay. */
+export type KeyProblem = "rejected" | "no_credit";
+
+/** A request made with a person's own key failed because of the key or its account. */
+export class ProviderKeyError extends Error {
+  readonly provider: ModelId;
+  readonly problem: KeyProblem;
+  constructor(provider: ModelId, problem: KeyProblem = "rejected") {
+    super(problem === "rejected" ? `The ${provider} API key was rejected` : `The ${provider} API account has no credit`);
+    this.name = "ProviderKeyError";
+    this.provider = provider;
+    this.problem = problem;
+  }
+}

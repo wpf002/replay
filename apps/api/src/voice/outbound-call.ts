@@ -1,15 +1,27 @@
 import {
   CALL_SUMMARY_SYSTEM,
+  callModel,
   outboundCallSystem,
   outboundCallTools,
   placeCall,
   runAgent,
   type CALL_OUTCOMES,
 } from "@relay/agent";
-import { addMessage, formatPhone, recordUsage, settleRunningAction } from "@relay/core";
+import {
+  addMessage,
+  formatPhone,
+  fromDbModel,
+  keyProblemMessage,
+  loadKeyRing,
+  markModelKeyInvalid,
+  recordUsage,
+  settleRunningAction,
+  toDbModel,
+  type KeyRing,
+} from "@relay/core";
 import { getPrisma, type Action, type Conversation, type User } from "@relay/db";
-import { claude, type AgentMessage, type Usage } from "@relay/providers";
-import type { ModelId } from "@relay/types";
+import { getProvider, type AgentMessage, type Usage } from "@relay/providers";
+import { ProviderKeyError, type ModelId } from "@relay/types";
 import type { FastifyBaseLogger } from "fastify";
 import type { z } from "zod";
 import type { RelaySocket, SetupMessage } from "./relay.js";
@@ -41,6 +53,9 @@ export class OutboundCall {
   private openerTimer: NodeJS.Timeout | undefined;
   private callTimer: NodeJS.Timeout | undefined;
   private abort: AbortController | undefined;
+  private ring!: KeyRing;
+  /** Claude or ChatGPT, on the person's key when they've connected one. */
+  private model!: NonNullable<ReturnType<typeof callModel>>;
 
   constructor(
     private readonly relay: RelaySocket,
@@ -57,6 +72,17 @@ export class OutboundCall {
     this.user = conversation.user;
     this.action = conversation.action;
     this.brief = placeCall.input.parse(conversation.action.payload);
+    this.ring = await loadKeyRing(this.user.id, this.user.timezone);
+    const model = callModel(this.ring.keyFor, fromDbModel(this.user.defaultModel));
+    if (!model) {
+      this.finished = true;
+      await settleRunningAction(this.action.id, {
+        ok: false,
+        message: `${this.brief.businessName}: I couldn't make the call. Connect Claude or ChatGPT in the Relay app first.`,
+      });
+      return false;
+    }
+    this.model = model;
 
     this.openerTimer = setTimeout(() => this.onPrompt(""), OPENER_DELAY_MS);
     this.callTimer = setTimeout(() => {
@@ -101,7 +127,11 @@ export class OutboundCall {
   }
 
   private onUsage = (provider: ModelId, usage: Usage, model: string) =>
-    recordUsage({ userId: this.user.id, provider, model, channel: "VOICE", ...usage });
+    recordUsage({ userId: this.user.id, provider, model, channel: "VOICE", byok: this.ring.byok(provider), ...usage });
+
+  private onKeyProblem = async (err: ProviderKeyError) => {
+    if (err.problem === "rejected") await markModelKeyInvalid(this.user.id, err.provider);
+  };
 
   private async persist(from: "business" | "relay", content: string): Promise<void> {
     if (!content.trim()) return;
@@ -110,7 +140,7 @@ export class OutboundCall {
       direction: from === "business" ? "INBOUND" : "OUTBOUND",
       role: from === "business" ? "USER" : "ASSISTANT",
       content,
-      ...(from === "relay" ? { model: "CLAUDE" as const } : {}),
+      ...(from === "relay" ? { model: toDbModel(this.model.provider) } : {}),
     });
   }
 
@@ -123,7 +153,8 @@ export class OutboundCall {
     let spoken = "";
     try {
       const turn = await runAgent({
-        provider: claude,
+        provider: getProvider(this.model.provider),
+        ...this.model.key,
         tier: "fast",
         system: outboundCallSystem({
           clientName: this.user.name ?? "my client",
@@ -148,6 +179,8 @@ export class OutboundCall {
           now: new Date(),
           hasGoogle: false,
           onUsage: this.onUsage,
+          keyFor: this.ring.keyFor,
+          onKeyProblem: this.onKeyProblem,
         },
         requestApproval: () => {
           throw new Error("No approvals during a business call");
@@ -169,7 +202,10 @@ export class OutboundCall {
         | undefined;
       if (finish) await this.finish(finish.outcome, finish.summary);
     } catch (err) {
-      if (!this.abort.signal.aborted) throw err;
+      if (err instanceof ProviderKeyError) {
+        await this.onKeyProblem(err);
+        await this.finish("needs_you", `I had to hang up: ${keyProblemMessage(err.provider, err.problem)}`);
+      } else if (!this.abort.signal.aborted) throw err;
     } finally {
       this.relay.text("", true);
     }
@@ -202,13 +238,14 @@ export class OutboundCall {
     });
     if (!transcript.length) return null;
     const lines = transcript.map((m) => `${m.role === "USER" ? this.brief.businessName : "Relay"}: ${m.content}`);
-    const res = await claude.complete({
+    const res = await getProvider(this.model.provider).complete({
+      ...this.model.key,
       tier: "fast",
       system: { stable: CALL_SUMMARY_SYSTEM },
       messages: [{ role: "user", content: `Goal: ${this.brief.goal}\n\nTranscript:\n${lines.join("\n")}` }],
       maxTokens: 300,
     });
-    await this.onUsage("claude", res.usage, res.model);
+    await this.onUsage(this.model.provider, res.usage, res.model);
     return res.text || null;
   }
 }

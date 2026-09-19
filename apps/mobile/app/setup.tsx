@@ -1,19 +1,35 @@
-import { MODELS, type MeDTO, type ModelId } from "@relay/types";
+import { AI_PROVIDERS, MODELS, type MeDTO, type ModelId } from "@relay/types";
 import { router } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { Alert, StyleSheet, View } from "react-native";
+import { useAiConnect } from "../src/lib/ai-connect";
 import { api, ApiError } from "../src/lib/api";
 import { formatPhone } from "../src/lib/format";
 import { connectGoogle } from "../src/lib/google";
-import { MODEL_INFO } from "../src/lib/models";
+import { ACCESS_LABEL, MODEL_INFO, modelAccess } from "../src/lib/models";
 import { openMessages, relayNumber, saveRelayContact } from "../src/lib/relay";
 import { useMe, useSession } from "../src/lib/session";
 import { radius, space, useTheme } from "../src/theme";
-import { Appear, Button, Card, Icon, LogoMark, OptionCard, Screen, Stack, Text, type IconName } from "../src/ui";
+import {
+  Appear,
+  Button,
+  Card,
+  Chip,
+  Icon,
+  ListGroup,
+  ListRow,
+  LogoMark,
+  OptionCard,
+  Screen,
+  Stack,
+  Text,
+  type IconName,
+} from "../src/ui";
+import { AiConnectForm } from "../src/ui/ai-connect-form";
 import { Steps } from "../src/ui/nav";
 
-type Step = "contact" | "google" | "brain" | "pin" | "done";
-const ORDER: Step[] = ["contact", "google", "brain", "pin", "done"];
+type Step = "ai" | "key" | "contact" | "google" | "pin" | "done";
+const ORDER: Step[] = ["ai", "key", "contact", "google", "pin", "done"];
 
 function Hero({ icon, title, body }: { icon: IconName; title: string; body: string }) {
   const { colors } = useTheme();
@@ -47,11 +63,18 @@ function Point({ icon, children }: { icon: IconName; children: ReactNode }) {
 export default function Setup() {
   const me = useMe();
   const { setMe, refresh } = useSession();
-  const [step, setStep] = useState<Step>("contact");
+  const [step, setStep] = useState<Step>("ai");
   const [busy, setBusy] = useState(false);
   const [brain, setBrain] = useState<ModelId>(me.defaultModel);
+  const [justConnected, setJustConnected] = useState(false);
+  const conn = useAiConnect(brain, (_me, provider) => {
+    setBrain(provider);
+    setJustConnected(true);
+  });
   const number = relayNumber(me.relayNumber);
   const next = () => setStep(ORDER[Math.min(ORDER.indexOf(step) + 1, ORDER.length - 1)]!);
+  const brainAccess = modelAccess(me, brain);
+  const brainInfo = AI_PROVIDERS[brain];
 
   async function addContact() {
     setBusy(true);
@@ -89,7 +112,8 @@ export default function Setup() {
     setBusy(true);
     try {
       setMe(await api<MeDTO>("/v1/me", { method: "PATCH", body: { defaultModel: brain } }));
-      next();
+      // Already connected (setup reopened): nothing to paste.
+      setStep(modelAccess(me, brain) === "connected" ? "contact" : "key");
     } catch (err) {
       Alert.alert("Couldn't save", err instanceof ApiError ? err.message : "Try again.");
     } finally {
@@ -97,8 +121,41 @@ export default function Setup() {
     }
   }
 
+  /** The key they pasted belonged to another provider; that one becomes the default. */
+  async function afterKey() {
+    if (brain !== me.defaultModel) {
+      try {
+        setMe(await api<MeDTO>("/v1/me", { method: "PATCH", body: { defaultModel: brain } }));
+      } catch {
+        // They can change the default in Settings.
+      }
+    }
+    next();
+  }
+
   const index = ORDER.indexOf(step);
   const footer = {
+    ai: <Button label="Continue" block loading={busy} onPress={saveBrain} />,
+    key:
+      justConnected || brainAccess === "connected" ? (
+        <Button label="Continue" block onPress={() => void afterKey()} />
+      ) : (
+        <Stack gap={2}>
+          <Button
+            label={`Connect ${AI_PROVIDERS[conn.provider].name}`}
+            block
+            loading={conn.checking}
+            disabled={!conn.key}
+            onPress={() => void conn.connect()}
+          />
+          <Button
+            label={brainAccess === "included" ? `Use Relay's included ${brainInfo.name}` : "Skip for now"}
+            kind="ghost"
+            block
+            onPress={next}
+          />
+        </Stack>
+      ),
     contact: (
       <Stack gap={2}>
         <Button label="Add Relay to contacts" icon="user-plus" block loading={busy} onPress={addContact} />
@@ -111,7 +168,6 @@ export default function Setup() {
         <Button label="Not now" kind="ghost" block onPress={next} />
       </Stack>
     ),
-    brain: <Button label="Continue" block loading={busy} onPress={saveBrain} />,
     pin: (
       <Stack gap={2}>
         <Button
@@ -141,6 +197,71 @@ export default function Setup() {
           <Button label="Skip setup" kind="ghost" small onPress={() => router.replace("/(tabs)")} />
         ) : null}
       </View>
+
+      {step === "ai" ? (
+        <Stack gap={6} key="ai">
+          <Hero
+            icon="cpu"
+            title="Choose your AI"
+            body="It answers your texts and calls. You can switch per message with a prefix, or connect more later."
+          />
+          <Stack gap={3}>
+            {MODELS.map((m) => {
+              const access = modelAccess(me, m);
+              return (
+                <OptionCard
+                  key={m}
+                  selected={brain === m}
+                  onPress={() => setBrain(m)}
+                  title={`${MODEL_INFO[m].name} · ${MODEL_INFO[m].by}`}
+                  badge={access === "connected" || access === "included" ? ACCESS_LABEL[access] : MODEL_INFO[m].prefix}
+                  subtitle={MODEL_INFO[m].blurb}
+                />
+              );
+            })}
+          </Stack>
+        </Stack>
+      ) : null}
+
+      {step === "key" ? (
+        <Stack gap={6} key="key">
+          {justConnected || brainAccess === "connected" ? (
+            <>
+              <Hero
+                icon="check"
+                title={`${brainInfo.name} is connected`}
+                body={`Relay answers with your ${brainInfo.company} account. Want another one for prefixes like ${AI_PROVIDERS.perplexity.prefix}?`}
+              />
+              <ListGroup>
+                {MODELS.filter((m) => m !== brain).map((m) => {
+                  const access = modelAccess(me, m);
+                  return (
+                    <ListRow
+                      key={m}
+                      icon={MODEL_INFO[m].icon}
+                      title={`${MODEL_INFO[m].name}`}
+                      subtitle={`${MODEL_INFO[m].prefix} · ${MODEL_INFO[m].blurb}`}
+                      onPress={() => router.push(`/ai/${m}`)}
+                      accessory={
+                        <Chip label={access === "connected" ? "Connected" : "Connect"} tone={access === "connected" ? "success" : "text"} />
+                      }
+                    />
+                  );
+                })}
+              </ListGroup>
+            </>
+          ) : (
+            <>
+              <Hero
+                icon="key"
+                title={`Connect ${AI_PROVIDERS[conn.provider].name}`}
+                body={`Relay uses your own ${AI_PROVIDERS[conn.provider].company} API key. It takes about a minute.`}
+              />
+              <AiConnectForm conn={conn} />
+            </>
+          )}
+        </Stack>
+      ) : null}
 
       {step === "contact" ? (
         <Stack gap={6} key="contact">
@@ -174,28 +295,6 @@ export default function Setup() {
             <Point icon="eye">Relay reads email and events only when a request needs them.</Point>
             <Point icon="check-circle">Nothing sends and no one gets an invite until you approve it.</Point>
             <Point icon="lock">Access tokens are encrypted, and you can disconnect anytime.</Point>
-          </Stack>
-        </Stack>
-      ) : null}
-
-      {step === "brain" ? (
-        <Stack gap={6} key="brain">
-          <Hero
-            icon="cpu"
-            title="Pick your default"
-            body="This model answers texts without a prefix. Start any text with a prefix to switch for that message."
-          />
-          <Stack gap={3}>
-            {MODELS.map((m) => (
-              <OptionCard
-                key={m}
-                selected={brain === m}
-                onPress={() => setBrain(m)}
-                title={MODEL_INFO[m].name}
-                badge={MODEL_INFO[m].prefix}
-                subtitle={MODEL_INFO[m].blurb}
-              />
-            ))}
           </Stack>
         </Stack>
       ) : null}

@@ -1,4 +1,4 @@
-import { closeQueues, closeRedis, hashPin } from "@relay/core";
+import { closeQueues, closeRedis, hashPin, saveModelKey } from "@relay/core";
 import { getPrisma } from "@relay/db";
 import type { FastifyInstance } from "fastify";
 import twilio from "twilio";
@@ -51,6 +51,16 @@ describe.skipIf(!hasDb)("voice", () => {
     const convo = await getPrisma().conversation.findFirstOrThrow({ where: { userId: user.id } });
     expect(res.body).toContain(`<Parameter name="conversationId" value="${convo.id}"/>`);
     expect(convo).toMatchObject({ channel: "VOICE", direction: "INBOUND" });
+  });
+
+  it("asks callers to connect their AI when Relay doesn't include it", async () => {
+    const user = await makeUser({ defaultModel: "GPT" });
+    const res = await app.inject(call(user.phone));
+    expect(res.body).toContain("<Say>ChatGPT isn't connected yet. Open the Relay app and connect it under AI accounts.</Say>");
+    expect(res.body).toContain("<Hangup/>");
+
+    await saveModelKey(user.id, "gpt", "sk-proj-own-key-abcdefghijklmnop");
+    expect((await app.inject(call(user.phone))).body).toContain("<ConversationRelay");
   });
 
   it("treats calls without A attestation as unverified", async () => {

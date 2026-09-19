@@ -27,6 +27,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Set by some endpoints so the page can offer a fix, like "no_credit". */
+    readonly reason?: string,
   ) {
     super(message);
   }
@@ -50,7 +52,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   } catch {
     throw new ApiError("Couldn't reach Relay. Try again in a minute.", 0);
   }
-  const data = (await res.json().catch(() => null)) as { error?: string } | null;
-  if (!res.ok) throw new ApiError(data?.error ?? "Something went wrong.", res.status);
+  const data = (await res.json().catch(() => null)) as { error?: string; reason?: string } | null;
+  if (!res.ok) throw new ApiError(data?.error ?? "Something went wrong.", res.status, data?.reason);
   return data as T;
 }

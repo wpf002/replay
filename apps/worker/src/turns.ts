@@ -12,10 +12,13 @@ import {
 } from "@relay/agent";
 import {
   acquireLock,
-  dailySpend,
   fromDbModel,
+  keyProblemMessage,
+  loadKeyRing,
   log,
+  markModelKeyInvalid,
   MODEL_LABELS,
+  noAccessMessage,
   recordUsage,
   textUser,
   toDbModel,
@@ -23,7 +26,7 @@ import {
 } from "@relay/core";
 import { getPrisma } from "@relay/db";
 import { getProvider, perplexity, type Citation, type Usage } from "@relay/providers";
-import { NotConfiguredError, type ModelId } from "@relay/types";
+import { NotConfiguredError, ProviderKeyError, type ModelId } from "@relay/types";
 import { DelayedError, type Job } from "bullmq";
 
 /** One agent turn at a time per person, so replies and history stay in order. */
@@ -88,13 +91,6 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
       metadata: { kind: "reply", ...extra.metadata },
     });
 
-  const spend = await dailySpend(user.id, user.timezone);
-  if (spend.over) {
-    await markHandled();
-    await reply("You've reached today's usage limit. It resets at midnight your time.");
-    return;
-  }
-
   const route = parseRoute(input, fromDbModel(user.defaultModel));
   if (!route.text) {
     await markHandled();
@@ -102,19 +98,33 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
     return;
   }
 
+  // The person's own key when they've connected one, otherwise Relay's (within today's cap).
+  const ring = await loadKeyRing(user.id, user.timezone);
+  const credential = ring.credential(route.model);
+  if (credential.source === "none") {
+    await markHandled();
+    await reply(noAccessMessage(route.model, credential.reason));
+    return;
+  }
+  const key = credential.source === "user" ? { apiKey: credential.apiKey } : {};
+
   const now = new Date();
   const [{ context, hasGoogle }, history] = await Promise.all([
     loadUserContext(user, now),
     loadHistory(user.id, batch[0]!.createdAt),
   ]);
   const onUsage = (provider: ModelId, usage: Usage, model: string) =>
-    recordUsage({ userId: user.id, provider, model, channel: "SMS", ...usage });
+    recordUsage({ userId: user.id, provider, model, channel: "SMS", byok: ring.byok(provider), ...usage });
+  const onKeyProblem = async (err: ProviderKeyError) => {
+    if (err.problem === "rejected") await markModelKeyInvalid(user.id, err.provider);
+  };
 
   let body: string;
   let metadata: Record<string, unknown> = {};
   try {
     if (route.model === "perplexity") {
       const res = await perplexity.complete({
+        ...key,
         system: webRouteSystem(context),
         messages: [...history, { role: "user", content: route.text }],
         maxTokens: 1500,
@@ -126,10 +136,11 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
     } else {
       const turn = await runAgent({
         provider: getProvider(route.model),
+        ...key,
         system: smsSystem(context),
         history,
         input: route.text,
-        tools: toolsFor({ channel: "sms", hasGoogle }),
+        tools: toolsFor({ channel: "sms", hasGoogle, webSearch: ring.keyFor("perplexity") !== null }),
         ctx: {
           userId: user.id,
           userName: user.name,
@@ -141,6 +152,8 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
           now,
           hasGoogle,
           onUsage,
+          keyFor: ring.keyFor,
+          onKeyProblem,
         },
         requestApproval: approvalGate({
           userId: user.id,
@@ -158,6 +171,12 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
       };
     }
   } catch (err) {
+    if (err instanceof ProviderKeyError) {
+      await onKeyProblem(err);
+      await markHandled();
+      await reply(keyProblemMessage(err.provider, err.problem));
+      return;
+    }
     if (err instanceof NotConfiguredError) {
       log.error({ err, model: route.model }, "model provider not configured");
       await markHandled();

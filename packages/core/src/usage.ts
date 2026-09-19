@@ -12,6 +12,8 @@ export interface UsageRecord {
   inputTokens: number;
   outputTokens: number;
   costMicros: number;
+  /** Paid by the person's own key. */
+  byok?: boolean;
 }
 
 export async function recordUsage(u: UsageRecord): Promise<void> {
@@ -24,6 +26,7 @@ export async function recordUsage(u: UsageRecord): Promise<void> {
       inputTokens: u.inputTokens,
       outputTokens: u.outputTokens,
       costMicros: u.costMicros,
+      byok: u.byok ?? false,
     },
   });
 }
@@ -35,11 +38,14 @@ export interface SpendStatus {
   resetsAt: Date;
 }
 
-/** Model spend since local midnight in the user's time zone, against DAILY_SPEND_CAP_CENTS. */
+/**
+ * Spend on Relay's keys since local midnight in the user's time zone, against
+ * DAILY_SPEND_CAP_CENTS. Usage on the person's own keys doesn't count.
+ */
 export async function dailySpend(userId: string, timezone: string): Promise<SpendStatus> {
   const since = startOfDay(timezone);
   const agg = await getPrisma().usage.aggregate({
-    where: { userId, createdAt: { gte: since } },
+    where: { userId, byok: false, createdAt: { gte: since } },
     _sum: { costMicros: true },
   });
   const spentCents = (agg._sum.costMicros ?? 0) / 10_000;

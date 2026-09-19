@@ -1,4 +1,4 @@
-import { MODELS, type ActionDTO, type HistoryItemDTO, type MeDTO, type MemoryDTO, type ReminderDTO } from "@relay/types";
+import { AI_PROVIDERS, MODELS, type ActionDTO, type HistoryItemDTO, type MeDTO, type MemoryDTO, type ReminderDTO } from "@relay/types";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -14,6 +14,7 @@ import {
   updateSettings,
 } from "./actions";
 import styles from "./account.module.css";
+import { AiAccounts } from "./components/ai-accounts";
 import { Approvals } from "./components/approvals";
 import { DeleteAccount, PinForm } from "./components/forms";
 import { SignIn } from "./components/sign-in";
@@ -21,11 +22,7 @@ import { SignIn } from "./components/sign-in";
 export const metadata: Metadata = { title: "Account" };
 export const dynamic = "force-dynamic";
 
-const MODEL_NAMES: Record<string, { name: string; prefix: string }> = {
-  claude: { name: "Claude", prefix: "@claude" },
-  gpt: { name: "GPT", prefix: "@gpt" },
-  perplexity: { name: "Perplexity", prefix: "@web" },
-};
+const MODEL_NAMES = AI_PROVIDERS as Record<string, { name: string; prefix: string }>;
 
 const ZONES = [
   "America/New_York",
@@ -191,6 +188,15 @@ export default async function AccountPage({
                   </a>
                 </div>
               ) : null}
+            </section>
+
+            <section className={styles.card}>
+              <h2 className={styles.h3}>AI accounts</h2>
+              <p className="muted">
+                Connect the AIs you use with an API key from each provider. Relay encrypts keys and only sends them to
+                that provider.
+              </p>
+              <AiAccounts accounts={me.aiAccounts} included={me.includedModels} />
             </section>
 
             <section className={styles.card}>

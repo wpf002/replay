@@ -79,6 +79,25 @@ model User {
   memories      Memory[]
   reminders     Reminder[]
   usage         Usage[]
+  modelKeys     ModelKey[]
+}
+
+/// A person's own API key for a model provider. Their requests to that provider use it and
+/// bill to their account instead of Relay's.
+model ModelKey {
+  id        String    @id @default(cuid())
+  userId    String
+  provider  ModelId
+  keyEnc    String
+  // Last four characters, for display. The key itself is never returned by the API.
+  hint      String
+  // Set when the provider rejects the key during use (revoked, out of credit).
+  invalidAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
 }
 
 model Connection {
@@ -202,6 +221,8 @@ model Usage {
   inputTokens   Int
   outputTokens  Int
   costMicros    Int // USD * 1e6
+  // Billed to the person's own key, so it doesn't count toward Relay's daily cap.
+  byok          Boolean  @default(false)
   createdAt     DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

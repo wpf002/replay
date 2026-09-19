@@ -439,3 +439,40 @@
     width: 100%;
   }
 }
+
+.aiRow {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.list li.aiRow {
+  display: grid;
+  align-items: stretch;
+}
+
+.aiHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.aiHead .meta {
+  display: block;
+}
+
+.keyForm {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-inner);
+  background: var(--surface-muted);
+}
+
+.steps {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-1);
+}

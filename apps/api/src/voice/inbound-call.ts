@@ -14,16 +14,19 @@ import {
   addMessage,
   checkPin,
   confirmActions,
-  dailySpend,
   denyActions,
   fromDbModel,
+  keyProblemMessage,
+  loadKeyRing,
+  markModelKeyInvalid,
+  noAccessMessage,
   recordUsage,
   textUser,
   toDbModel,
 } from "@relay/core";
 import { getPrisma, type Conversation, type User } from "@relay/db";
 import { getProvider, perplexity, type AgentMessage, type Usage } from "@relay/providers";
-import type { ModelId } from "@relay/types";
+import { ProviderKeyError, type ModelId } from "@relay/types";
 import type { FastifyBaseLogger } from "fastify";
 import { isCancel, spokenDigits, type RelaySocket, type SetupMessage } from "./relay.js";
 
@@ -197,22 +200,29 @@ export class InboundCall {
     }
 
     const user = await this.freshUser();
-    const spend = await dailySpend(user.id, user.timezone);
-    if (spend.over) {
-      this.relay.say("You've reached today's usage limit. It resets at midnight. Talk soon.");
-      setTimeout(() => this.relay.end({ reason: "spend_cap" }), 5000);
+    const defaultModel = fromDbModel(user.defaultModel);
+    const route = parseSpokenRoute(text, defaultModel);
+    const ring = await loadKeyRing(user.id, user.timezone);
+    const credential = ring.credential(route.model);
+    if (credential.source === "none") {
+      this.relay.say(noAccessMessage(route.model, credential.reason, { voice: true }));
+      // Nothing else will work on this call when the default model is out.
+      if (route.model === defaultModel) setTimeout(() => this.relay.end({ reason: "no_model_access" }), 7000);
       return;
     }
+    const key = credential.source === "user" ? { apiKey: credential.apiKey } : {};
 
     await this.persist("USER", text);
-    const route = parseSpokenRoute(text, fromDbModel(user.defaultModel));
     const { context, hasGoogle } = await loadUserContext(user);
     if (!this.verified) context.memories = [];
     context.callerVerified = this.verified;
     context.hasPin = Boolean(user.pinHash);
 
     const onUsage = (provider: ModelId, usage: Usage, model: string) =>
-      recordUsage({ userId: user.id, provider, model, channel: "VOICE", ...usage });
+      recordUsage({ userId: user.id, provider, model, channel: "VOICE", byok: ring.byok(provider), ...usage });
+    const onKeyProblem = async (err: ProviderKeyError) => {
+      if (err.problem === "rejected") await markModelKeyInvalid(user.id, err.provider);
+    };
 
     this.abort = new AbortController();
     const signal = this.abort.signal;
@@ -229,6 +239,7 @@ export class InboundCall {
     try {
       if (route.model === "perplexity") {
         const res = await perplexity.complete({
+          ...key,
           system: voiceWebSystem(context),
           messages: [...this.history, { role: "user", content: route.text }],
           onText: speak,
@@ -240,11 +251,17 @@ export class InboundCall {
         model = route.model;
         const turn = await runAgent({
           provider: getProvider(route.model),
+          ...key,
           tier: "fast",
           system: voiceSystem(context),
           history: this.history,
           input: route.text,
-          tools: toolsFor({ channel: "voice", hasGoogle, callerVerified: this.verified }),
+          tools: toolsFor({
+            channel: "voice",
+            hasGoogle,
+            callerVerified: this.verified,
+            webSearch: ring.keyFor("perplexity") !== null,
+          }),
           ctx: {
             userId: user.id,
             userName: user.name,
@@ -255,6 +272,8 @@ export class InboundCall {
             now: new Date(),
             hasGoogle,
             onUsage,
+            keyFor: ring.keyFor,
+            onKeyProblem,
           },
           requestApproval: approvalGate({
             userId: user.id,
@@ -287,7 +306,10 @@ export class InboundCall {
         }
       }
     } catch (err) {
-      if (!signal.aborted) throw err;
+      if (err instanceof ProviderKeyError) {
+        await onKeyProblem(err);
+        speak(keyProblemMessage(err.provider, err.problem, { voice: true }));
+      } else if (!signal.aborted) throw err;
     } finally {
       this.relay.text("", true);
     }

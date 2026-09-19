@@ -1,6 +1,6 @@
 "use server";
 
-import type { AuthSession, AuthVerifyResult } from "@relay/types";
+import { MODELS, type AuthSession, type AuthVerifyResult, type ModelId } from "@relay/types";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { api, ApiError, clearSession, setSession } from "../../lib/session";
@@ -86,6 +86,26 @@ export async function updateSettings(form: FormData): Promise<void> {
     if (typeof value === "string" && value.trim()) body[key] = value.trim();
   }
   await mutate(() => api("/v1/me", { method: "PATCH", body }));
+}
+
+export type ConnectResult = { ok: true } | { ok: false; error: string; reason?: string };
+
+/** Sends the pasted key to the API, which checks it with the provider before saving it. */
+export async function connectAiAccount(provider: ModelId, key: string): Promise<ConnectResult> {
+  if (!MODELS.includes(provider)) return { ok: false, error: "Unknown provider." };
+  try {
+    await api(`/v1/ai-accounts/${provider}`, { method: "PUT", body: { key } });
+  } catch (err) {
+    if (err instanceof ApiError) return { ok: false, error: err.message, ...(err.reason ? { reason: err.reason } : {}) };
+    return { ok: false, error: "Something went wrong." };
+  }
+  revalidatePath("/account");
+  return { ok: true };
+}
+
+export async function disconnectAiAccount(provider: ModelId): Promise<void> {
+  if (!MODELS.includes(provider)) return;
+  await mutate(() => api(`/v1/ai-accounts/${provider}`, { method: "DELETE" }));
 }
 
 export async function connectGoogle(): Promise<void> {

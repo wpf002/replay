@@ -1,11 +1,12 @@
 import Constants from "expo-constants";
 import { router, useFocusEffect } from "expo-router";
+import { MODELS } from "@relay/types";
 import { useCallback, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { api, ApiError } from "../../src/lib/api";
 import { dollars, formatPhone, initials } from "../../src/lib/format";
 import { connectGoogle, disconnectGoogle } from "../../src/lib/google";
-import { MODEL_INFO } from "../../src/lib/models";
+import { MODEL_INFO, modelAccess } from "../../src/lib/models";
 import { openMessages, openWeb, relayNumber, saveRelayContact } from "../../src/lib/relay";
 import { useMe, useSession } from "../../src/lib/session";
 import { radius, space, useTheme } from "../../src/theme";
@@ -130,6 +131,41 @@ export default function Settings() {
           <Button label="Text START" kind="secondary" small onPress={() => void openMessages(number, "START")} style={{ alignSelf: "flex-start" }} />
         </Card>
       ) : null}
+
+      <Section title="AI accounts">
+        <ListGroup>
+          {MODELS.map((m) => {
+            const access = modelAccess(me, m);
+            const account = me.aiAccounts.find((a) => a.provider === m);
+            return (
+              <ListRow
+                key={m}
+                icon={MODEL_INFO[m].icon}
+                title={MODEL_INFO[m].name}
+                subtitle={
+                  access === "connected"
+                    ? `Your ${MODEL_INFO[m].by} key ${account?.hint ?? ""}${me.defaultModel === m ? " · Default" : ""}`
+                    : access === "invalid"
+                      ? "Key stopped working. Tap to update it."
+                      : access === "included"
+                        ? `Included up to a daily limit${me.defaultModel === m ? " · Default" : ""}`
+                        : `Connect to use ${MODEL_INFO[m].prefix}`
+                }
+                onPress={() => router.push(`/ai/${m}`)}
+                accessory={
+                  access === "connected" ? (
+                    <Chip label="Connected" tone="success" />
+                  ) : access === "invalid" ? (
+                    <Chip label="Fix" tone="danger" />
+                  ) : (
+                    <Chip label="Connect" tone="text" />
+                  )
+                }
+              />
+            );
+          })}
+        </ListGroup>
+      </Section>
 
       <Section title="Relay">
         <ListGroup>

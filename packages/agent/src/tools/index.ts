@@ -1,5 +1,5 @@
 import { calendarCreate, calendarList } from "./calendar.js";
-import { checkCallTarget, placeCall } from "./calls.js";
+import { callModel, checkCallTarget, placeCall } from "./calls.js";
 import { gmailRead, gmailSearch, gmailSend } from "./gmail.js";
 import { forget, remember } from "./memory.js";
 import { cancelReminderTool, listReminders, setReminder } from "./reminders.js";
@@ -11,6 +11,7 @@ export * from "./outbound.js";
 export * from "./types.js";
 export {
   calendarCreate,
+  callModel,
   checkCallTarget,
   placeCall,
   calendarList,
@@ -54,6 +55,8 @@ export interface ToolFilter {
    * access to the person's email, calendar, or memory. Anything sensitive goes out by text.
    */
   callerVerified?: boolean;
+  /** False when the person has no Perplexity access (no key of their own, none included). */
+  webSearch?: boolean;
 }
 
 /** Tools available for this person on this channel. */
@@ -62,6 +65,7 @@ export function toolsFor(opts: ToolFilter): AnyTool[] {
   return ALL.filter((t) => {
     if (opts.channel === "sms" && t.voiceOnly) return false;
     if (opts.channel === "voice" && t.smsOnly) return false;
+    if (t === webSearch && opts.webSearch === false) return false;
     if (t.needsGoogle && (!opts.hasGoogle || !verified)) return false;
     if (!verified && (t === remember || t === forget)) return false;
     return true;

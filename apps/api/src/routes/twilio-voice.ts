@@ -1,8 +1,10 @@
 import { placeCall } from "@relay/agent";
 import {
   conversationRelayTwiml,
-  dailySpend,
   env,
+  fromDbModel,
+  loadKeyRing,
+  noAccessMessage,
   rateLimit,
   relayUrl,
   settleRunningAction,
@@ -53,8 +55,10 @@ export async function twilioVoiceRoutes(app: FastifyInstance): Promise<void> {
 
     const calls = await rateLimit(`calls:${user.id}`, 12, 60 * 60);
     if (!calls.allowed) return sayAndHangUp(reply, "You've made a lot of calls this hour. Try again a bit later.");
-    if ((await dailySpend(user.id, user.timezone)).over) {
-      return sayAndHangUp(reply, "You've reached today's usage limit. It resets at midnight.");
+    const defaultModel = fromDbModel(user.defaultModel);
+    const access = (await loadKeyRing(user.id, user.timezone)).credential(defaultModel);
+    if (access.source === "none") {
+      return sayAndHangUp(reply, noAccessMessage(defaultModel, access.reason, { voice: true }));
     }
 
     const conversation = await getPrisma().conversation.upsert({

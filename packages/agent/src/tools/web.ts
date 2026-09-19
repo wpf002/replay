@@ -19,7 +19,12 @@ export const webSearch = defineTool({
   untrusted: true,
   describe: ({ query }) => `Search the web for "${query}"`,
   async run({ query }, ctx) {
+    const key = ctx.keyFor("perplexity");
+    if (!key) {
+      return { content: "Web search isn't available for this person right now. Answer from what you know and say you couldn't check the web." };
+    }
     const res = await perplexity.complete({
+      ...key,
       system: { stable: WEB_SEARCH_SYSTEM },
       messages: [
         {
