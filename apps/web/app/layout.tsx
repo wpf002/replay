@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(site.url),
   title: { default: "Relay", template: "%s · Relay" },
   description:
-    "Text or call one number for Claude, GPT, and Perplexity. Relay reads your email, manages your calendar, sets reminders, and remembers what you tell it.",
+    "Text or call one number for Claude, ChatGPT, and Perplexity. Relay reads your email, manages your calendar, sets reminders, and remembers what you tell it.",
   openGraph: {
     title: "Relay",
     description: "Text or call your AI.",

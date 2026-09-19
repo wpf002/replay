@@ -49,3 +49,7 @@ export const ACCESS_LABEL: Record<ModelAccess, string> = {
   included: "Included",
   none: "Not connected",
 };
+
+/** "Claude · Anthropic", or just "Perplexity" when the product and company share a name. */
+export const modelTitle = (model: ModelId) =>
+  MODEL_INFO[model].name === MODEL_INFO[model].by ? MODEL_INFO[model].name : `${MODEL_INFO[model].name} · ${MODEL_INFO[model].by}`;

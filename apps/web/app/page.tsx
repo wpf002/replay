@@ -48,7 +48,7 @@ const STEPS = [
 
 const BRAINS = [
   { prefix: "@claude", name: "Claude", by: "Anthropic", body: "Writing, reasoning, and anything that takes actions. The default for new accounts." },
-  { prefix: "@gpt", name: "GPT", by: "OpenAI", body: "A second opinion on the same question, or your default if you prefer it." },
+  { prefix: "@gpt", name: "ChatGPT", by: "OpenAI", body: "A second opinion on the same question, or your default if you prefer it." },
   { prefix: "@web", name: "Sonar", by: "Perplexity", body: "Live web answers with sources, for anything that changed this week." },
   { prefix: null, name: "Your default", by: "Set in the app", body: "It searches the web on its own when a question needs current information." },
 ];
@@ -89,7 +89,7 @@ export default function Home() {
             <span className="eyebrow">Invite-only beta</span>
             <h1 className={styles.display}>Text or call your AI.</h1>
             <p className={styles.lead}>
-              Relay is one phone number with Claude, GPT, and Perplexity behind it. It answers
+              Relay is one phone number with Claude, ChatGPT, and Perplexity behind it. It answers
               questions, reads your email, adds to your calendar, sets reminders, and remembers what
               you tell it. You use it from Messages and your phone&apos;s dialer.
             </p>

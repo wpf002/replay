@@ -11,7 +11,7 @@ const DEMO = [
   { from: "me" as const, text: "remind me to call mom sunday at 5" },
   { from: "relay" as const, text: "Done. I'll text you Sunday at 5:00 PM." },
   { from: "me" as const, text: "@gpt make this sound less annoyed: per my last email" },
-  { from: "relay" as const, text: "Just following up on my note from last week. Any update?", note: "via GPT" },
+  { from: "relay" as const, text: "Just following up on my note from last week. Any update?", note: "via ChatGPT" },
 ];
 
 export default function Welcome() {
@@ -35,7 +35,7 @@ export default function Welcome() {
         </Appear>
         <Appear delay={120}>
           <Text variant="body" color="textMuted">
-            One phone number with Claude, GPT, and Perplexity behind it. It reads your email, adds to your calendar, sets
+            One phone number with Claude, ChatGPT, and Perplexity behind it. It reads your email, adds to your calendar, sets
             reminders, and remembers what you tell it.
           </Text>
         </Appear>

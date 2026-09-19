@@ -2,7 +2,7 @@ import { MODELS, type MeDTO, type ModelId } from "@relay/types";
 import { router } from "expo-router";
 import { useState } from "react";
 import { api, ApiError } from "../src/lib/api";
-import { ACCESS_LABEL, canUse, MODEL_INFO, modelAccess } from "../src/lib/models";
+import { ACCESS_LABEL, canUse, MODEL_INFO, modelAccess, modelTitle } from "../src/lib/models";
 import { useMe, useSession } from "../src/lib/session";
 import { Button, Card, OptionCard, Screen, Stack, Text } from "../src/ui";
 import { PageHeader } from "../src/ui/nav";
@@ -48,7 +48,7 @@ export default function ModelScreen() {
             key={m}
             selected={choice === m}
             onPress={() => setChoice(m)}
-            title={`${MODEL_INFO[m].name} · ${MODEL_INFO[m].by}`}
+            title={modelTitle(m)}
             badge={MODEL_INFO[m].prefix}
             subtitle={`${ACCESS_LABEL[modelAccess(me, m)]}. ${MODEL_INFO[m].blurb}`}
           />

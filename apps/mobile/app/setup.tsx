@@ -6,7 +6,7 @@ import { useAiConnect } from "../src/lib/ai-connect";
 import { api, ApiError } from "../src/lib/api";
 import { formatPhone } from "../src/lib/format";
 import { connectGoogle } from "../src/lib/google";
-import { ACCESS_LABEL, MODEL_INFO, modelAccess } from "../src/lib/models";
+import { ACCESS_LABEL, MODEL_INFO, modelAccess, modelTitle } from "../src/lib/models";
 import { openMessages, relayNumber, saveRelayContact } from "../src/lib/relay";
 import { useMe, useSession } from "../src/lib/session";
 import { radius, space, useTheme } from "../src/theme";
@@ -145,11 +145,11 @@ export default function Setup() {
             label={`Connect ${AI_PROVIDERS[conn.provider].name}`}
             block
             loading={conn.checking}
-            disabled={!conn.key}
+            disabled={!conn.key || Boolean(conn.otherProvider)}
             onPress={() => void conn.connect()}
           />
           <Button
-            label={brainAccess === "included" ? `Use Relay's included ${brainInfo.name}` : "Skip for now"}
+            label={conn.provider === brain && brainAccess === "included" ? `Use Relay's included ${brainInfo.name}` : "Skip for now"}
             kind="ghost"
             block
             onPress={next}
@@ -213,7 +213,7 @@ export default function Setup() {
                   key={m}
                   selected={brain === m}
                   onPress={() => setBrain(m)}
-                  title={`${MODEL_INFO[m].name} · ${MODEL_INFO[m].by}`}
+                  title={modelTitle(m)}
                   badge={access === "connected" || access === "included" ? ACCESS_LABEL[access] : MODEL_INFO[m].prefix}
                   subtitle={MODEL_INFO[m].blurb}
                 />

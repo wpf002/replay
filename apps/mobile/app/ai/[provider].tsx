@@ -66,7 +66,7 @@ export default function AiAccount() {
         label={`Connect ${info.name}`}
         block
         loading={conn.checking}
-        disabled={!conn.key}
+        disabled={!conn.key || Boolean(conn.otherProvider)}
         onPress={() => void conn.connect()}
       />
       {replacing ? <Button label="Keep the current key" kind="ghost" block onPress={() => setReplacing(false)} /> : null}
