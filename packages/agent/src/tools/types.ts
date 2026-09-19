@@ -19,6 +19,8 @@ export interface ToolContext {
   timezone: string;
   channel: "sms" | "voice";
   conversationId: string;
+  /** Inbound message this turn answers, when there is one. */
+  sourceMessageId?: string;
   now: Date;
   hasGoogle: boolean;
   /** Called for every model request a tool makes, so spend caps see it. */
@@ -53,7 +55,7 @@ export interface ToolDef<I = unknown> {
    * Exact description shown to the user before they approve. Built from the validated input,
    * never from model prose, so what they approve is what runs.
    */
-  describe: (input: I, ctx: ToolContext) => string;
+  describe: (input: I, ctx: ToolContext) => string | Promise<string>;
   run: (input: I, ctx: ToolContext) => Promise<ToolOutput>;
 }
 

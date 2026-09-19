@@ -1,10 +1,11 @@
+import { forget, remember } from "./memory.js";
 import type { AnyTool } from "./types.js";
 import { webSearch } from "./web.js";
 
 export * from "./types.js";
-export { webSearch };
+export { forget, remember, webSearch };
 
-const ALL: AnyTool[] = [webSearch];
+const ALL: AnyTool[] = [webSearch, remember, forget];
 
 /** Tools available for this person on this channel. */
 export function toolsFor(opts: { channel: "sms" | "voice"; hasGoogle: boolean }): AnyTool[] {

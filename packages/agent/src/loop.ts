@@ -113,7 +113,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentTurn> {
     toolsUsed.push(tool.name);
 
     if (requiresApproval(tool, input, tainted)) {
-      const summary = tool.describe(input, o.ctx);
+      const summary = await tool.describe(input, o.ctx);
       const risk = tool.risk?.(input) ?? "MEDIUM";
       const p = await o.requestApproval({ tool, input, summary, risk, tainted });
       pending.push(p);

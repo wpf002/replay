@@ -137,6 +137,7 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
           timezone: user.timezone,
           channel: "sms",
           conversationId: conversation.id,
+          sourceMessageId: inbound.id,
           now,
           hasGoogle,
           onUsage,
