@@ -11,7 +11,7 @@ const ENV_PATH = resolve(join(dirname(fileURLToPath(import.meta.url)), "../../..
  * Development only: picks up .env edits (pnpm configure, a new tunnel URL) without restarting.
  * Keys removed from the file keep their old value until a restart.
  */
-export function watchEnvFile(log: FastifyBaseLogger): () => void {
+export function watchEnvFile(log: FastifyBaseLogger, onReload?: () => void): () => void {
   let timer: NodeJS.Timeout | undefined;
   try {
     const watcher = watch(ENV_PATH, () => {
@@ -21,6 +21,7 @@ export function watchEnvFile(log: FastifyBaseLogger): () => void {
           for (const [key, value] of envEntries(readEnvFile(ENV_PATH))) process.env[key] = value;
           resetEnv();
           log.info("reloaded .env");
+          onReload?.();
         } catch (err) {
           log.warn({ err }, "couldn't reload .env");
         }

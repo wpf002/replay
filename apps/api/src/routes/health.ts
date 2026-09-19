@@ -1,4 +1,4 @@
-import { redis } from "@relay/core";
+import { env, redis } from "@relay/core";
 import { getPrisma } from "@relay/db";
 import type { FastifyInstance } from "fastify";
 
@@ -13,6 +13,8 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
       ok,
       db: db.status === "fulfilled",
       redis: cache.status === "fulfilled",
+      // Where Twilio should be pointing, so nothing opens a second tunnel to the same server.
+      publicUrl: env().PUBLIC_API_URL ?? null,
     });
   });
 }

@@ -18,6 +18,8 @@ const isQuickTunnel = (url: string | undefined) => Boolean(url && QUICK_TUNNEL.t
 
 export interface Tunnel {
   url: Promise<string>;
+  /** Set once the tunnel is up. */
+  publicUrl: string | null;
   stop: () => void;
 }
 
@@ -56,10 +58,9 @@ export function openTunnel(port: number): Tunnel {
     }
   });
 
-  return {
-    url,
-    stop: () => child?.kill("SIGTERM"),
-  };
+  const tunnel: Tunnel = { url, publicUrl: null, stop: () => child?.kill("SIGTERM") };
+  void url.then((value) => (tunnel.publicUrl = value)).catch(() => undefined);
+  return tunnel;
 }
 
 /** Saves the public URL where this server, the worker, and Twilio will each find it. */
