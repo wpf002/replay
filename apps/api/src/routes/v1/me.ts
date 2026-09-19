@@ -1,5 +1,8 @@
 import {
+  ACTIVE_TASK_STATUSES,
   cancelReminderJob,
+  enqueueBrowserWipe,
+  pushComputerSignal,
   checkPin,
   disconnectGoogle,
   hashPin,
@@ -92,6 +95,13 @@ export async function meRoutes(app: FastifyInstance): Promise<void> {
         ),
       ),
     );
+    // Running browser tasks stop, and the browser profile (their site sign-ins) is deleted.
+    const tasks = await prisma.computerTask.findMany({
+      where: { userId: user.id, status: { in: [...ACTIVE_TASK_STATUSES] } },
+      select: { id: true },
+    });
+    await Promise.all(tasks.map((t) => pushComputerSignal(t.id, { type: "cancel" })));
+    await enqueueBrowserWipe(user.id);
     await prisma.user.delete({ where: { id: user.id } });
     return { ok: true };
   });

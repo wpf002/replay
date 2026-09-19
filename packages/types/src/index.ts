@@ -211,3 +211,61 @@ export class ProviderKeyError extends Error {
     this.problem = problem;
   }
 }
+
+// ── Relay's computer: tasks Relay does in its own web browser ─────────────
+
+export type ComputerTaskState =
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "waiting_user"
+  | "done"
+  | "failed"
+  | "canceled";
+
+export interface ComputerStepDTO {
+  id: string;
+  /** "action" | "note" | "approval" | "handoff" | "question" | "answer" | "result" */
+  kind: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface ComputerTaskDTO {
+  id: string;
+  goal: string;
+  /** "browse": Relay drives. "signin": the person signs in to a site themselves. */
+  mode: "browse" | "signin";
+  state: ComputerTaskState;
+  /** While waiting_user: a question to answer, or the browser to take over. */
+  waitingKind: "answer" | "takeover" | null;
+  waitingFor: string | null;
+  /** The approval Relay is waiting on, while waiting_approval. */
+  action: ActionDTO | null;
+  url: string | null;
+  title: string | null;
+  summary: string | null;
+  error: string | null;
+  /** Changes whenever the screen does. Use it to refresh the screenshot. */
+  screenVersion: string | null;
+  createdAt: string;
+  endedAt: string | null;
+  steps: ComputerStepDTO[];
+}
+
+export const COMPUTER_TASK_ACTIVE: ComputerTaskState[] = ["queued", "running", "waiting_approval", "waiting_user"];
+
+/** Browser size while Relay drives, and while the person takes over from a phone. */
+export const COMPUTER_VIEWPORT = { width: 1280, height: 800 } as const;
+export const TAKEOVER_VIEWPORT = { width: 390, height: 844 } as const;
+
+export type ComputerKey = "Enter" | "Tab" | "Backspace" | "Escape";
+
+/** What the person does while they control the browser. Coordinates are page pixels. */
+export type ComputerInput =
+  | { type: "click"; x: number; y: number }
+  | { type: "type"; text: string }
+  | { type: "key"; key: ComputerKey }
+  | { type: "scroll"; direction: "up" | "down" }
+  | { type: "navigate"; url: string }
+  | { type: "back" };

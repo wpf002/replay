@@ -1,8 +1,10 @@
 import { aiAccounts, dailySpend, env, fromDbModel, GOOGLE_SCOPES, includedModels, isRecurrence } from "@relay/core";
-import { getPrisma, type Action, type Conversation, type Memory, type Message, type Reminder, type User } from "@relay/db";
+import { getPrisma, type Action, type ComputerStep, type ComputerTask, type Conversation, type Memory, type Message, type Reminder, type User } from "@relay/db";
 import type {
   ActionDTO,
   ActionState,
+  ComputerTaskDTO,
+  ComputerTaskState,
   HistoryItemDTO,
   MeDTO,
   MemoryDTO,
@@ -105,5 +107,38 @@ export async function toMeDTO(user: User): Promise<MeDTO> {
     usage: { spentCents: Math.round(spend.spentCents * 100) / 100, capCents: spend.capCents },
     counts: { pendingActions, memories, upcomingReminders },
     createdAt: user.createdAt.toISOString(),
+  };
+}
+
+const TASK_STATE: Record<ComputerTask["status"], ComputerTaskState> = {
+  QUEUED: "queued",
+  RUNNING: "running",
+  WAITING_APPROVAL: "waiting_approval",
+  WAITING_USER: "waiting_user",
+  SUCCEEDED: "done",
+  FAILED: "failed",
+  CANCELED: "canceled",
+};
+
+export function toComputerTaskDTO(
+  t: ComputerTask,
+  extra: { steps?: ComputerStep[]; action?: Action | null; screenVersion?: string | null } = {},
+): ComputerTaskDTO {
+  return {
+    id: t.id,
+    goal: t.goal,
+    mode: t.mode === "signin" ? "signin" : "browse",
+    state: TASK_STATE[t.status],
+    waitingKind: t.status === "WAITING_USER" && (t.waitingKind === "answer" || t.waitingKind === "takeover") ? t.waitingKind : null,
+    waitingFor: t.waitingFor,
+    action: extra.action && t.status === "WAITING_APPROVAL" ? toActionDTO(extra.action) : null,
+    url: t.url,
+    title: t.title,
+    summary: t.summary,
+    error: t.error ? "failed" : null,
+    screenVersion: extra.screenVersion ?? null,
+    createdAt: t.createdAt.toISOString(),
+    endedAt: t.endedAt?.toISOString() ?? null,
+    steps: (extra.steps ?? []).map((s) => ({ id: s.id, kind: s.kind, text: s.text, createdAt: s.createdAt.toISOString() })),
   };
 }

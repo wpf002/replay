@@ -53,6 +53,17 @@ The wizard opens each provider's key page, takes the key as hidden input, checks
 - **Twilio.** Picks or buys a number (shows the price and asks first), creates the Verify service and the "Relay" Messaging Service, and sets the webhooks.
 - **Google.** Opens the console pages, then checks the client ID, redirect URI, and secret with Google. `http://localhost:4000/oauth/google/callback` works for development.
 
+### Relay's browser
+
+Relay does things on websites in its own browser: books flights and tables, orders groceries, fills out forms. Text it ("order my usual from Instacart") and the agent calls `use_computer`. The worker runs Chrome through Playwright and Claude drives it with Anthropic's browser toolset (`browser_toolset_20260801`, page outline plus screenshots).
+
+- **Approvals.** Before anything that spends, books, sends, or submits, the model calls `request_approval`. That creates an Action like any other: YES by text, with the PIN for purchases if one is set, or approve in the app. The domain in the prompt comes from the browser, not the model.
+- **Only the person signs in.** Passwords, one-time codes, CAPTCHAs, and card numbers go through `hand_off`: the person gets a text, opens the live view in the app, taps and types on Relay's browser, and taps Done. Their input goes straight to the page and is never stored or logged. Settings has "Sign in to a site" to do it ahead of time.
+- **Questions.** `ask_user` texts a question; the person's next text is routed to the task instead of the agent. Texting "cancel" stops it.
+- **Profiles.** Each person has a Chrome profile under `BROWSER_PROFILE_DIR`, so sign-ins stick. Deleting the account or "Sign out of all sites" deletes it.
+- **Network.** The browser refuses localhost, private ranges, and metadata addresses. In production, also block private networks at the container's network layer, since a public name can resolve to a private address.
+- **Limits.** 2 tasks at a time, 25 a day, 80 model requests and 25 active minutes per task, 30 minutes to answer or approve.
+
 ### AI accounts (bring your own key)
 
 People connect their own Claude, ChatGPT, and Perplexity accounts in the app: onboarding starts with "Choose your AI", then opens the provider's key page in an in-app browser and takes the pasted key. The web `/account` page has the same flow. Subscription logins can't be used: Anthropic doesn't allow Claude Pro or Max in other apps, and ChatGPT Plus doesn't include API access.
@@ -105,6 +116,8 @@ Create an OAuth client (web application) with the Gmail and Calendar APIs enable
 | `CLAUDE_PRICE`, `CLAUDE_FAST_PRICE`, `OPENAI_PRICE`, `OPENAI_FAST_PRICE`, `PERPLEXITY_PRICE` | yes | `input/output` USD per million tokens, for the spend cap. Unset falls back to 15/75 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | for email/calendar | Google Cloud console |
 | `GOOGLE_REDIRECT_URI` | no | Defaults to `{PUBLIC_API_URL}/oauth/google/callback` |
+| `BROWSER_PROFILE_DIR`, `BROWSER_CHANNEL`, `BROWSER_EXECUTABLE_PATH` | no | Relay's browser. Defaults to installed Chrome and `~/.relay/browser-profiles` |
+| `COMPUTER_MODEL`, `COMPUTER_PRICE` | no | Model that drives the browser and its price. Defaults to `CLAUDE_MODEL` / `CLAUDE_PRICE` |
 | `DAILY_SPEND_CAP_CENTS` | no | Per-user daily spend on Relay's model keys, default 300. Their own keys aren't capped |
 | `INVITE_ONLY` | no | Default `true`; signup needs an invite code |
 | `DEV_LOGIN_CODE` | no | Development only; bypasses Twilio Verify |
@@ -116,7 +129,7 @@ Create an OAuth client (web application) with the Gmail and Calendar APIs enable
 
 ```
 apps/api            Fastify: /twilio/sms, /twilio/voice, /voice/ws, /twilio/call-status, /oauth/google, /v1
-apps/worker         BullMQ workers: agent turns, approved actions, reminders
+apps/worker         BullMQ workers: agent turns, approved actions, reminders, Relay's browser
 apps/web            Next.js: landing, waitlist, /privacy, /terms, /account
 apps/mobile         Expo: sign-up, setup, approvals, activity, settings
 packages/agent      router (@claude/@gpt/@web), agent loop, tools, approval gate, prompts

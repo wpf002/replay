@@ -1,5 +1,6 @@
 import { calendarCreate, calendarList } from "./calendar.js";
 import { callModel, checkCallTarget, placeCall } from "./calls.js";
+import { computerConfirm, useComputer } from "./computer.js";
 import { gmailRead, gmailSearch, gmailSend } from "./gmail.js";
 import { forget, remember } from "./memory.js";
 import { cancelReminderTool, listReminders, setReminder } from "./reminders.js";
@@ -12,6 +13,8 @@ export * from "./types.js";
 export {
   calendarCreate,
   callModel,
+  computerConfirm,
+  useComputer,
   checkCallTarget,
   placeCall,
   calendarList,
@@ -42,6 +45,7 @@ const ALL: AnyTool[] = [
   calendarList,
   calendarCreate,
   placeCall,
+  useComputer,
   textMe,
   followUpByText,
   endCall,
@@ -72,6 +76,9 @@ export function toolsFor(opts: ToolFilter): AnyTool[] {
   });
 }
 
+/** Tools that only run as approved Actions and are never offered to the model. */
+const INTERNAL: AnyTool[] = [computerConfirm];
+
 export function findTool(name: string): AnyTool | undefined {
-  return ALL.find((t) => t.name === name);
+  return ALL.find((t) => t.name === name) ?? INTERNAL.find((t) => t.name === name);
 }

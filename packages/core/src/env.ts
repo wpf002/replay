@@ -52,6 +52,15 @@ const schema = z.object({
     .preprocess((v) => (v === "" || v === undefined ? "false" : v), z.enum(["true", "false"]))
     .transform((v) => v === "true"),
   DEV_LOGIN_CODE: optional,
+  // Relay's web browser. Profiles hold each person's sign-ins; keep them on private disk.
+  BROWSER_PROFILE_DIR: optional,
+  // "chrome" uses the installed Google Chrome. Or point BROWSER_EXECUTABLE_PATH at a Chromium.
+  BROWSER_CHANNEL: optional,
+  BROWSER_EXECUTABLE_PATH: optional,
+  // Model that drives the browser. Needs the browser toolset (Claude Opus 5, Sonnet 5, Fable 5).
+  COMPUTER_MODEL: optional,
+  // "input/output" USD per million tokens for COMPUTER_MODEL. Defaults to CLAUDE_PRICE.
+  COMPUTER_PRICE: optional,
   VOICE_TTS_PROVIDER: optional,
   VOICE_NAME: optional,
 });

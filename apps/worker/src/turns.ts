@@ -19,7 +19,9 @@ import {
   markModelKeyInvalid,
   MODEL_LABELS,
   noAccessMessage,
+  pushComputerSignal,
   recordUsage,
+  taskAwaitingAnswer,
   textUser,
   toDbModel,
   type TurnJob,
@@ -90,6 +92,16 @@ async function smsTurn(job: Job<TurnJob>): Promise<void> {
       ...(extra.model ? { model: toDbModel(extra.model) } : {}),
       metadata: { kind: "reply", ...extra.metadata },
     });
+
+  // A browser task asked a question: this text is the answer (or a request to stop).
+  const waiting = await taskAwaitingAnswer(user.id);
+  if (waiting && !/^@\w/.test(input.trim())) {
+    const stop = /^(cancel|stop|never ?mind)( it| that| the task)?[.!]*$/i.test(input.trim());
+    await pushComputerSignal(waiting.id, stop ? { type: "cancel" } : { type: "answer", text: input });
+    await markHandled();
+    await reply(stop ? "Stopped." : "Got it.");
+    return;
+  }
 
   const route = parseRoute(input, fromDbModel(user.defaultModel));
   if (!route.text) {

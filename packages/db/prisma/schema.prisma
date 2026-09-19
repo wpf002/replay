@@ -80,6 +80,7 @@ model User {
   reminders     Reminder[]
   usage         Usage[]
   modelKeys     ModelKey[]
+  tasks         ComputerTask[]
 }
 
 /// A person's own API key for a model provider. Their requests to that provider use it and
@@ -245,4 +246,63 @@ model WaitlistEntry {
   email     String   @unique
   source    String?
   createdAt DateTime @default(now())
+}
+
+enum ComputerTaskStatus {
+  QUEUED
+  RUNNING
+  // Stopped before a purchase, booking, or send until the person approves the Action.
+  WAITING_APPROVAL
+  // Stopped until the person answers a question or takes over the browser (sign-in, 2FA).
+  WAITING_USER
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+/// A task Relay does in its own web browser: book, order, reserve, fill out, look up.
+model ComputerTask {
+  id             String             @id @default(cuid())
+  userId         String
+  // The conversation that asked for it, for replies and approvals.
+  conversationId String?
+  goal           String
+  startUrl       String?
+  // "browse": the model drives. "signin": the person signs in to a site themselves; no model.
+  mode           String             @default("browse")
+  status         ComputerTaskStatus @default(QUEUED)
+  // While WAITING_USER: "answer" (a question by text) or "takeover" (use the live view).
+  waitingKind    String?
+  // What Relay is waiting on, shown to the person.
+  waitingFor     String?
+  // The pending approval while WAITING_APPROVAL.
+  actionId       String?
+  // Page the browser is on.
+  url            String?
+  title          String?
+  // Final result for the person.
+  summary        String?
+  error          String?
+  costMicros     Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  endedAt        DateTime?
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps          ComputerStep[]
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
+}
+
+/// One line in a task's activity log: what Relay did or is waiting on.
+model ComputerStep {
+  id        String       @id @default(cuid())
+  taskId    String
+  // "action" | "note" | "approval" | "handoff" | "question" | "answer" | "result"
+  kind      String
+  text      String
+  createdAt DateTime     @default(now())
+  task      ComputerTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }

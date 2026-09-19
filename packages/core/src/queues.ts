@@ -8,7 +8,11 @@ export const QUEUE = {
   actions: "actions",
   /** Delayed jobs that text a reminder at its time. */
   reminders: "reminders",
+  /** Tasks Relay does in its own web browser, and wiping a person's browser profile. */
+  computer: "computer",
 } as const;
+
+export type ComputerJob = { taskId: string } | { wipeUserId: string };
 
 export interface TurnJob {
   userId: string;
@@ -76,6 +80,23 @@ export async function scheduleReminder(reminderId: string, runAt: Date): Promise
 
 export async function cancelReminderJob(jobId: string): Promise<void> {
   await getQueue(QUEUE.reminders).remove(jobId);
+}
+
+export async function enqueueComputerTask(taskId: string): Promise<void> {
+  await getQueue(QUEUE.computer).add("task", { taskId } satisfies ComputerJob, {
+    ...RETAIN,
+    jobId: `computer-${taskId}`,
+    attempts: 1,
+  });
+}
+
+/** Deletes the person's browser profile (cookies, sign-ins) on the machine that runs the browser. */
+export async function enqueueBrowserWipe(userId: string): Promise<void> {
+  await getQueue(QUEUE.computer).add("wipe", { wipeUserId: userId } satisfies ComputerJob, {
+    ...RETAIN,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5000 },
+  });
 }
 
 export async function closeQueues(): Promise<void> {

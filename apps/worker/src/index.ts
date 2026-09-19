@@ -3,6 +3,7 @@ import { getPrisma } from "@relay/db";
 import { Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { processAction } from "./actions.js";
+import { processComputer } from "./computer/task.js";
 import { processReminder } from "./reminders.js";
 import { processTurn } from "./turns.js";
 
@@ -13,6 +14,8 @@ const workers = [
   new Worker(QUEUE.turns, processTurn, { connection, concurrency: 8 }),
   new Worker(QUEUE.actions, processAction, { connection, concurrency: 4 }),
   new Worker(QUEUE.reminders, processReminder, { connection, concurrency: 8 }),
+  // Each task holds a Chrome instance, so keep this low.
+  new Worker(QUEUE.computer, processComputer, { connection, concurrency: 3 }),
 ];
 
 for (const worker of workers) {
