@@ -163,3 +163,36 @@ export async function startChatTask(
   await enqueueComputerTask(task.id);
   return task;
 }
+
+const ALIVE_TTL_S = 90;
+const aliveKey = (taskId: string) => `computer:alive:${taskId}`;
+
+/** A task only counts as running while the worker holding its browser keeps saying so. */
+export async function markTaskAlive(taskId: string): Promise<void> {
+  await redis().set(aliveKey(taskId), "1", "EX", ALIVE_TTL_S);
+}
+
+export async function clearTaskAlive(taskId: string): Promise<void> {
+  await redis().del(aliveKey(taskId));
+}
+
+/**
+ * Ends tasks left behind by a worker that stopped: their browser is gone, so nothing will ever
+ * answer the person waiting on them.
+ */
+export async function endOrphanedTasks(): Promise<number> {
+  const prisma = getPrisma();
+  const active = await prisma.computerTask.findMany({
+    where: { status: { in: ["RUNNING", "WAITING_APPROVAL", "WAITING_USER"] } },
+    select: { id: true },
+  });
+  if (!active.length) return 0;
+  const alive = await redis().mget(active.map((t) => aliveKey(t.id)));
+  const dead = active.filter((_, i) => !alive[i]).map((t) => t.id);
+  if (!dead.length) return 0;
+  await prisma.computerTask.updateMany({
+    where: { id: { in: dead } },
+    data: { status: "FAILED", error: "worker_restarted", summary: "Relay restarted, so that one stopped.", endedAt: new Date() },
+  });
+  return dead.length;
+}

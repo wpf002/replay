@@ -1,4 +1,4 @@
-import { closeQueues, closeRedis, env, log, QUEUE } from "@relay/core";
+import { closeQueues, closeRedis, endOrphanedTasks, env, log, QUEUE } from "@relay/core";
 import { getPrisma } from "@relay/db";
 import { Worker } from "bullmq";
 import { Redis } from "ioredis";
@@ -24,6 +24,9 @@ for (const worker of workers) {
   });
   worker.on("error", (err) => log.error({ err, queue: worker.name }, "worker error"));
 }
+
+const orphaned = await endOrphanedTasks();
+if (orphaned) log.warn({ orphaned }, "ended browser tasks left behind by a stopped worker");
 
 log.info({ queues: workers.map((w) => w.name) }, "relay worker started");
 

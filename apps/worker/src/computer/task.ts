@@ -3,6 +3,8 @@ import { confirmationPrompt } from "@relay/agent";
 import {
   acquireLock,
   addComputerStep,
+  clearTaskAlive,
+  markTaskAlive,
   browserProfileDir,
   connectBrowserAccount,
   env,
@@ -103,9 +105,14 @@ export async function processComputer(job: Job<ComputerJob>, token?: string): Pr
     await job.moveToDelayed(Date.now() + 5000, token);
     throw new DelayedError();
   }
+  // While this runs, the task is visibly alive; if the worker dies, the sweep on boot ends it.
+  await markTaskAlive(task.id);
+  const heartbeat = setInterval(() => void markTaskAlive(task.id), 30_000);
   try {
     await new TaskRun(task, task.user).run();
   } finally {
+    clearInterval(heartbeat);
+    await clearTaskAlive(task.id);
     await lock.release();
   }
 }

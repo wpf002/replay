@@ -232,6 +232,12 @@ export class RelayBrowser {
   /** Runs one browser toolset member and returns the tool_result content. */
   async run(name: string, input: Input): Promise<ResultContent> {
     const text = (t: string): ResultContent => [{ type: "text", text: t }];
+    // Every tab can be gone: a page closed itself, or a popup replaced the last one.
+    if (!this.tabs.size) {
+      const page = await this.context.newPage();
+      this.opened = this.opened.filter((id) => this.tabs.has(id));
+      await offScreen(this.context, page);
+    }
     const before = this.url();
 
     switch (name) {
