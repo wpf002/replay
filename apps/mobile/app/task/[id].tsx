@@ -61,7 +61,7 @@ function TakeoverControls({ send }: { send: (input: ComputerInput) => Promise<vo
 
   return (
     <Card style={{ gap: space[3] }}>
-      <Text variant="caption">Tap the page to click. Type below and press Send. Relay doesn't see or save what you type.</Text>
+      <Text variant="caption">Tap the page to click. Type below and press Send: it goes straight into the page, and Relay never stores it.</Text>
       <View style={styles.typeRow}>
         <View style={[styles.typeBox, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
           <TextInput

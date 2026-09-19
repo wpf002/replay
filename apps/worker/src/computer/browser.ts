@@ -28,6 +28,25 @@ export function isBlockedHost(hostname: string): boolean {
   return false;
 }
 
+/**
+ * Relay's browser is the person's to drive from the app, not a window on whoever's machine runs
+ * the worker, so a real (non-headless) window is parked off-screen. Screenshots still work.
+ */
+async function offScreen(context: BrowserContext, page: Page): Promise<void> {
+  if (headless()) return;
+  try {
+    const cdp = await context.newCDPSession(page);
+    const { windowId } = (await cdp.send("Browser.getWindowForTarget")) as { windowId: number };
+    await cdp.send("Browser.setWindowBounds", {
+      windowId,
+      bounds: { left: -8000, top: 0, width: COMPUTER_VIEWPORT.width, height: COMPUTER_VIEWPORT.height + 90 },
+    });
+    await cdp.detach();
+  } catch {
+    // Older Chrome or a platform without window bounds: the window stays where it is.
+  }
+}
+
 /** Sites hand headless browsers far more bot checks, so run a real window where there's a display. */
 function headless(): boolean {
   const setting = env().BROWSER_HEADLESS;
@@ -120,7 +139,9 @@ export class RelayBrowser {
       const id = browser.track(page);
       browser.opened.push(id);
       browser.active = id;
+      void offScreen(context, page);
     });
+    await offScreen(context, browser.page());
     return browser;
   }
 
