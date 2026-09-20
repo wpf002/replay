@@ -1,6 +1,6 @@
 import twilio from "twilio";
 
-const url = "http://localhost:4000/twilio/sms";
+const url = `${process.env.PUBLIC_API_URL}/twilio/sms`;
 const params: Record<string, string> = {
   From: process.argv[2] ?? "+15125550142",
   To: process.env.TWILIO_PHONE_NUMBER ?? "+15555550100",

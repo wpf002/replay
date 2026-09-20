@@ -24,6 +24,7 @@ import {
   fromDbModel,
   type ComputerJob,
   type ComputerSignal,
+  type Lock,
 } from "@relay/core";
 import { getPrisma, type ComputerTask, type ComputerTaskStatus, type User } from "@relay/db";
 import { costMicros, keyProblem, OFFICIAL_BASE_URL, parsePrice } from "@relay/providers";
@@ -35,10 +36,14 @@ import { runChatTurn } from "./chat.js";
 import { runComputerLoop, type Outcome } from "./loop.js";
 import { COMPUTER_SYSTEM, computerContext } from "./prompt.js";
 
-/** How long Relay waits for an approval, an answer, or the person to finish a sign-in. */
+/** How long Relay waits for an approval or an answer, which the person gets by text. */
 const WAIT_MS = 30 * 60_000;
-/** Covers a long task plus several waits; the browser profile is locked for this long at most. */
-const LOCK_MS = 3 * 60 * 60_000;
+/** Hand-offs need them at the app, so these wait much longer before giving up. */
+const HANDOFF_WAIT_MS = 4 * 60 * 60_000;
+/** A person's browser stays open this long after a task, so the next text skips a cold start. */
+const WARM_MS = 10 * 60_000;
+/** Short, and pushed out while the task runs, so a worker that dies frees the browser quickly. */
+const LOCK_MS = 2 * 60_000;
 const APPROVAL_EXPIRY_MS = 30 * 60_000;
 /** When Relay looks back at a long job in the person's AI account, in minutes after the last look. */
 const CHECK_DELAYS_MIN = [2, 5, 10, 20, 30, 60];
@@ -51,6 +56,10 @@ export function computerModel(): string {
   if (e.COMPUTER_MODEL) return e.COMPUTER_MODEL;
   return e.CLAUDE_MODEL && TOOLSET_MODELS.test(e.CLAUDE_MODEL) ? e.CLAUDE_MODEL : "claude-sonnet-5";
 }
+
+/** Sign-in pages Relay shouldn't mistake for a signed-in session. */
+const LOGIN_URL = /\/(login|signin|sign-in|auth|register|signup)\b|accounts\.google\.com|appleid\.apple\.com|challenges\.cloudflare/i;
+const onLoginPage = (url: string) => LOGIN_URL.test(url);
 
 const hostOf = (url: string) => {
   try {
@@ -90,8 +99,39 @@ class Signals {
   }
 }
 
+/** One warm browser per person, held between tasks so consecutive texts don't reopen Chrome. */
+interface Warm {
+  browser: RelayBrowser;
+  lock: Lock;
+  idle?: NodeJS.Timeout;
+  heartbeat: NodeJS.Timeout;
+  busy: boolean;
+}
+
+const warm = new Map<string, Warm>();
+
+async function closeWarm(userId: string): Promise<void> {
+  const entry = warm.get(userId);
+  if (!entry || entry.busy) return;
+  warm.delete(userId);
+  clearTimeout(entry.idle);
+  clearInterval(entry.heartbeat);
+  await entry.browser.close();
+  await entry.lock.release();
+  log.info({ userId }, "closed an idle browser");
+}
+
+/** Closes every warm browser, e.g. on shutdown. */
+export async function closeWarmBrowsers(): Promise<void> {
+  for (const [userId, entry] of warm) {
+    entry.busy = false;
+    await closeWarm(userId).catch(() => undefined);
+  }
+}
+
 export async function processComputer(job: Job<ComputerJob>, token?: string): Promise<void> {
   if ("wipeUserId" in job.data) {
+    await closeWarm(job.data.wipeUserId);
     await rm(browserProfileDir(job.data.wipeUserId), { recursive: true, force: true });
     log.info({ userId: job.data.wipeUserId }, "browser profile wiped");
     return;
@@ -99,34 +139,66 @@ export async function processComputer(job: Job<ComputerJob>, token?: string): Pr
   const task = await getPrisma().computerTask.findUnique({ where: { id: job.data.taskId }, include: { user: true } });
   if (!task || task.status !== "QUEUED") return;
 
-  // One browser per person: their profile can only be open once.
-  const lock = await acquireLock(`browser:${task.userId}`, LOCK_MS);
-  if (!lock) {
+  let entry = warm.get(task.userId);
+  if (entry?.busy) {
     await job.moveToDelayed(Date.now() + 5000, token);
     throw new DelayedError();
   }
-  // While this runs, the task is visibly alive; if the worker dies, the sweep on boot ends it.
+  if (!entry) {
+    // One browser per person: their profile can only be open once, here or in another worker.
+    const lock = await acquireLock(`browser:${task.userId}`, LOCK_MS);
+    if (!lock) {
+      await job.moveToDelayed(Date.now() + 5000, token);
+      throw new DelayedError();
+    }
+    let browser: RelayBrowser;
+    try {
+      browser = await RelayBrowser.open(task.userId, task.user.timezone);
+    } catch (err) {
+      await lock.release();
+      log.error({ err, taskId: task.id }, "browser failed to start");
+      await getPrisma().computerTask.update({
+        where: { id: task.id },
+        data: { status: "FAILED", error: "browser_start", summary: "Relay's browser couldn't start. Try again in a bit.", endedAt: new Date() },
+      });
+      return;
+    }
+    entry = {
+      browser,
+      lock,
+      busy: false,
+      heartbeat: setInterval(() => void lock.extend(LOCK_MS), 30_000),
+    };
+    warm.set(task.userId, entry);
+  }
+
+  clearTimeout(entry.idle);
+  entry.busy = true;
+  // While this runs, the task is visibly alive; if the worker dies, the sweep ends it.
   await markTaskAlive(task.id);
-  const heartbeat = setInterval(() => void markTaskAlive(task.id), 30_000);
+  const alive = setInterval(() => void markTaskAlive(task.id), 30_000);
   try {
-    await new TaskRun(task, task.user).run();
+    await new TaskRun(task, task.user, entry.browser).run();
   } finally {
-    clearInterval(heartbeat);
+    clearInterval(alive);
     await clearTaskAlive(task.id);
-    await lock.release();
+    entry.busy = false;
+    entry.idle = setTimeout(() => void closeWarm(task.userId), WARM_MS);
   }
 }
 
 class TaskRun {
   private readonly prisma = getPrisma();
   private readonly signals: Signals;
-  private browser: RelayBrowser | null = null;
+  private readonly browser: RelayBrowser;
   private lastUrl = "";
 
   constructor(
     private readonly task: ComputerTask,
     private readonly user: User,
+    browser: RelayBrowser,
   ) {
+    this.browser = browser;
     this.signals = new Signals(task.id);
   }
 
@@ -152,7 +224,6 @@ class TaskRun {
 
   /** Publishes the current screen to the live view and keeps the task's URL and title current. */
   private async publishScreen(): Promise<void> {
-    if (!this.browser) return;
     try {
       await saveScreen(this.task.id, await this.browser.screenshot(60));
       const url = this.browser.url();
@@ -174,13 +245,13 @@ class TaskRun {
     poll?: () => Promise<"done" | "stop" | null>;
     takeover?: boolean;
   }): Promise<"done" | "stop" | "timeout"> {
-    const deadline = Date.now() + WAIT_MS;
+    const deadline = Date.now() + (opts.takeover ? HANDOFF_WAIT_MS : WAIT_MS);
     let lastShot = 0;
     while (Date.now() < deadline) {
       const signal = await this.signals.next(2);
       if (signal?.type === "cancel") return "stop";
       if (signal?.type === "input") {
-        if (opts.takeover && this.browser) {
+        if (opts.takeover) {
           await this.browser.apply(signal.input).catch((err: unknown) => log.warn({ err: (err as Error).message }, "takeover input failed"));
           await this.publishScreen();
           lastShot = Date.now();
@@ -207,14 +278,6 @@ class TaskRun {
     }
 
     await this.update({ status: "RUNNING" });
-    try {
-      this.browser = await RelayBrowser.open(this.user.id, this.user.timezone);
-    } catch (err) {
-      log.error({ err, taskId: this.task.id }, "browser failed to start");
-      await this.end("FAILED", "Relay's browser couldn't start, so I couldn't do that. Try again in a bit.", { error: "browser_start" });
-      return;
-    }
-
     const apiKey = credential.source === "user" ? credential.apiKey : undefined;
     try {
       if (this.task.mode === "signin") await this.signIn();
@@ -224,14 +287,14 @@ class TaskRun {
       log.error({ err, taskId: this.task.id }, "computer task failed");
       await this.end("FAILED", "Something went wrong in Relay's browser, so I stopped. Try again in a bit.", { error: (err as Error).message.slice(0, 500) });
     } finally {
-      await this.browser.close();
+      // The browser stays open for the next task; only the signal reader closes here.
       await this.signals.close();
     }
   }
 
   /** The person signs in to a site on Relay's browser; the profile keeps them signed in. */
   private async signIn(): Promise<void> {
-    const browser = this.browser!;
+    const browser = this.browser;
     const host = hostOf(this.task.startUrl ?? "");
     await browser.setViewport(TAKEOVER_VIEWPORT);
     if (this.task.startUrl) await browser.run("navigate", { url: this.task.startUrl });
@@ -239,6 +302,11 @@ class TaskRun {
     await this.update({ status: "WAITING_USER", waitingKind: "takeover", waitingFor: `Sign in to ${host}` });
     await addComputerStep(this.task.id, "handoff", `Waiting for you to sign in to ${host}`);
     const result = await this.wait({ takeover: true, on: (s) => (s.type === "resume" ? "done" : null) });
+    if (result === "done" && onLoginPage(browser.url())) {
+      await this.publishScreen();
+      await this.end("FAILED", `That still looks like the ${host} sign-in page. Open it again and finish signing in.`, { notify: false });
+      return;
+    }
     if (result === "done") {
       // Signing in to ChatGPT, Claude, or Perplexity connects that account for texts.
       if (this.task.provider) {
@@ -282,7 +350,7 @@ class TaskRun {
   }
 
   private async browse(apiKey: string | undefined, byok: boolean): Promise<void> {
-    const browser = this.browser!;
+    const browser = this.browser;
     const model = computerModel();
     const client = this.claude(apiKey);
     const memories = await this.prisma.memory.findMany({
@@ -329,7 +397,7 @@ class TaskRun {
    * answer back. Long jobs get a link now and a second text when they finish.
    */
   private async chat(apiKey: string | undefined, byok: boolean): Promise<void> {
-    const browser = this.browser!;
+    const browser = this.browser;
     const provider: ModelId = this.task.provider ? fromDbModel(this.task.provider) : "gpt";
     const info = AI_PROVIDERS[provider];
     const checking = this.task.mode === "check";
@@ -478,7 +546,7 @@ class TaskRun {
   }
 
   private async handOff(reason: string): Promise<"done" | "stopped" | "timeout"> {
-    const browser = this.browser!;
+    const browser = this.browser;
     await browser.setViewport(TAKEOVER_VIEWPORT);
     await this.publishScreen();
     await this.update({ status: "WAITING_USER", waitingKind: "takeover", waitingFor: reason.slice(0, 300) });

@@ -3,7 +3,7 @@ import { getPrisma } from "@relay/db";
 import { Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { processAction } from "./actions.js";
-import { processComputer } from "./computer/task.js";
+import { closeWarmBrowsers, processComputer } from "./computer/task.js";
 import { processReminder } from "./reminders.js";
 import { processTurn } from "./turns.js";
 
@@ -25,15 +25,23 @@ for (const worker of workers) {
   worker.on("error", (err) => log.error({ err, queue: worker.name }, "worker error"));
 }
 
-const orphaned = await endOrphanedTasks();
-if (orphaned) log.warn({ orphaned }, "ended browser tasks left behind by a stopped worker");
+async function sweepOrphans(): Promise<void> {
+  const ended = await endOrphanedTasks().catch((err: unknown) => {
+    log.warn({ err }, "orphan sweep failed");
+    return 0;
+  });
+  if (ended) log.warn({ ended }, "ended browser tasks left behind by a stopped worker");
+}
+await sweepOrphans();
+const sweeper = setInterval(() => void sweepOrphans(), 60_000);
 
 log.info({ queues: workers.map((w) => w.name) }, "relay worker started");
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, async () => {
     log.info({ signal }, "worker shutting down");
-    await Promise.allSettled(workers.map((w) => w.close()));
+    clearInterval(sweeper);
+    await Promise.allSettled([...workers.map((w) => w.close()), closeWarmBrowsers()]);
     await Promise.allSettled([closeQueues(), closeRedis(), connection.quit(), getPrisma().$disconnect()]);
     process.exit(0);
   });
